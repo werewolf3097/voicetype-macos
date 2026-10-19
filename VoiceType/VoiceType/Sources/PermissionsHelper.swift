@@ -4,8 +4,19 @@ import ApplicationServices
 import IOKit.hid
 
 enum PermissionsHelper {
+    /// AVAudioRecorder follows this permission. AVCaptureDevice can already
+    /// report "authorized" while the record prompt has never been shown.
     static func microphoneStatus() -> AVAuthorizationStatus {
-        AVCaptureDevice.authorizationStatus(for: .audio)
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            return .authorized
+        case .denied:
+            return .denied
+        case .undetermined:
+            return .notDetermined
+        @unknown default:
+            return .notDetermined
+        }
     }
 
     static func microphoneAuthorized() -> Bool {
@@ -13,7 +24,7 @@ enum PermissionsHelper {
     }
 
     static func requestMicrophone(_ completion: @escaping (Bool) -> Void) {
-        AVCaptureDevice.requestAccess(for: .audio) { granted in
+        AVAudioApplication.requestRecordPermission { granted in
             DispatchQueue.main.async { completion(granted) }
         }
     }
