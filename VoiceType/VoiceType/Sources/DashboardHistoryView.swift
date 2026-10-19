@@ -36,6 +36,9 @@ struct DashboardHistoryView: View {
                             if record.durationSeconds > 0 {
                                 Text("· \(Int(record.durationSeconds))с записи")
                             }
+                            if let lang = record.languageSummary, !lang.isEmpty {
+                                Text("· \(lang)")
+                            }
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)

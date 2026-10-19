@@ -11,18 +11,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             options: [.userInitiated, .latencyCritical],
             reason: "Глобальный хоткей должен реагировать даже когда приложение в фоне"
         )
+        NotificationHelper.requestAuthorizationIfNeeded()
+
+        DispatchQueue.main.async {
+            DashboardWindowController.shared.show()
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        Task { @MainActor in
+            DashboardWindowController.shared.show()
+        }
+        return true
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let menu = NSMenu()
+        let homeItem = NSMenuItem(title: "Открыть VoiceType", action: #selector(openHome), keyEquivalent: "")
+        homeItem.target = self
+        menu.addItem(homeItem)
+
         let settingsItem = NSMenuItem(title: "Настройки…", action: #selector(openSettings), keyEquivalent: "")
         settingsItem.target = self
         menu.addItem(settingsItem)
         return menu
     }
 
+    @objc private func openHome() {
+        Task { @MainActor in
+            DashboardWindowController.shared.show(section: .home)
+        }
+    }
+
     @objc private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        Task { @MainActor in
+            DashboardWindowController.shared.show(section: .settings)
+        }
     }
 }

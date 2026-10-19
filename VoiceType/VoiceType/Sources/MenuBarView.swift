@@ -3,7 +3,6 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -16,21 +15,59 @@ struct MenuBarView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if !appState.hotkeyActive {
+            if !appState.hotkeyActive || !appState.microphoneAuthorized || (settings.autoPaste && !appState.accessibilityAuthorized) {
                 permissionWarning
             }
 
             Divider()
 
-            Text("Зажмите \(settings.hotkey.rawValue), говорите, отпустите.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if settings.recordingMode == .toggle {
+                Text("Нажмите \(settings.hotkey.rawValue) для старта и ещё раз для стопа.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Зажмите \(settings.hotkey.rawValue), говорите, отпустите.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Divider()
 
+            if appState.activeMeetingID != nil {
+                HStack {
+                    Circle().fill(Color.red).frame(width: 8, height: 8)
+                    Text("Встреча: \(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))")
+                        .font(.caption.monospacedDigit())
+                }
+                Button("Завершить встречу и создать рекап") {
+                    appState.finishMeeting()
+                    DashboardWindowController.shared.show(section: .meetings)
+                }
+                Button("Открыть блокнот встречи…") {
+                    DashboardWindowController.shared.show(section: .meetings)
+                }
+            } else {
+                Button("Начать запись встречи (Granola)…") {
+                    _ = appState.startMeeting(
+                        template: .general,
+                        audioSource: settings.meetingAudioSource
+                    )
+                    DashboardWindowController.shared.show(section: .meetings)
+                }
+            }
+
+            Divider()
+
+            Button("Открыть VoiceType") {
+                DashboardWindowController.shared.show(section: .home)
+            }
+
+            Button("Встречи и рекапы…") {
+                DashboardWindowController.shared.show(section: .meetings)
+            }
+
             Button("Настройки…") {
-                openSettings()
-                NSApp.activate(ignoringOtherApps: true)
+                DashboardWindowController.shared.show(section: .settings)
             }
             .keyboardShortcut(",", modifiers: .command)
 
@@ -40,7 +77,7 @@ struct MenuBarView: View {
         }
         .padding(12)
         .frame(width: 260)
-        .onAppear { appState.restartHotkeyListener() }
+        .onAppear { appState.refreshPermissionsAndHotkey() }
     }
 
     @ViewBuilder
@@ -59,15 +96,56 @@ struct MenuBarView: View {
         }
     }
 
+    @ViewBuilder
     private var permissionWarning: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Нет доступа к чтению клавиш.")
-                .font(.caption)
-                .foregroundStyle(.orange)
-            Button("Открыть «Мониторинг ввода»") {
-                PermissionsHelper.openInputMonitoringSettings()
+        VStack(alignment: .leading, spacing: 8) {
+            if !appState.hotkeyActive {
+                if appState.inputMonitoringAuthorized {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Мониторинг ввода: нужен перезапуск.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Button("Перезапустить VoiceType") {
+                            PermissionsHelper.relaunchApp()
+                        }
+                        .font(.caption)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Нет доступа к чтению клавиш (хоткей).")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Button("Разрешить «Мониторинг ввода»") {
+                            PermissionsHelper.openInputMonitoringSettings()
+                        }
+                        .font(.caption)
+                    }
+                }
             }
-            .font(.caption)
+
+            if !appState.microphoneAuthorized {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Нет доступа к микрофону.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Button("Разрешить «Микрофон»") {
+                        PermissionsHelper.openMicrophoneSettings()
+                    }
+                    .font(.caption)
+                }
+            }
+
+            if settings.autoPaste && !appState.accessibilityAuthorized {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Нет доступа к Accessibility (автовставка).")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Button("Разрешить «Accessibility»") {
+                        PermissionsHelper.openAccessibilitySettings()
+                    }
+                    .font(.caption)
+                }
+            }
         }
     }
 }

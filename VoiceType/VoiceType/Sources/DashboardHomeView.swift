@@ -33,20 +33,70 @@ struct DashboardHomeView: View {
     }
 
     private var statusCard: some View {
-        HStack(spacing: 12) {
-            statusIcon
-                .font(.title2)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(statusTitle).font(.headline)
-                if case .error(let message) = appState.status {
-                    Text(message).font(.caption).foregroundStyle(.secondary)
-                } else if !appState.hotkeyActive {
-                    Text("Мониторинг ввода не разрешён — хоткей не работает вне этого окна.")
-                        .font(.caption)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                statusIcon
+                    .font(.title2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(statusTitle).font(.headline)
+                    if case .error(let message) = appState.status {
+                        Text(message).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+
+            if !appState.hotkeyActive {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                    if appState.inputMonitoringAuthorized {
+                        Text("Мониторинг ввода разрешён, но нужен перезапуск приложения.")
+                            .font(.caption)
+                        Spacer()
+                        Button("Перезапустить") {
+                            PermissionsHelper.relaunchApp()
+                        }
+                        .controlSize(.small)
+                    } else {
+                        Text("Мониторинг ввода не разрешён — хоткей не работает вне этого окна.")
+                            .font(.caption)
+                        Spacer()
+                        Button("Разрешить") {
+                            PermissionsHelper.openInputMonitoringSettings()
+                        }
+                        .controlSize(.small)
+                    }
                 }
             }
-            Spacer()
+
+            if !appState.microphoneAuthorized {
+                HStack {
+                    Image(systemName: "mic.slash.fill")
+                        .foregroundStyle(.orange)
+                    Text("Доступ к микрофону не разрешён — запись голоса невозможна.")
+                        .font(.caption)
+                    Spacer()
+                    Button("Разрешить") {
+                        PermissionsHelper.openMicrophoneSettings()
+                    }
+                    .controlSize(.small)
+                }
+            }
+
+            if settings.autoPaste && !appState.accessibilityAuthorized {
+                HStack {
+                    Image(systemName: "hand.raised.fill")
+                        .foregroundStyle(.orange)
+                    Text("Accessibility не разрешён — автовставка (Cmd+V) в поля ввода не сработает.")
+                        .font(.caption)
+                    Spacer()
+                    Button("Разрешить") {
+                        PermissionsHelper.openAccessibilitySettings()
+                    }
+                    .controlSize(.small)
+                }
+            }
         }
         .padding(16)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
@@ -87,6 +137,13 @@ struct DashboardHomeView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Последняя расшифровка").font(.headline)
+                if let lang = record.languageSummary, !lang.isEmpty {
+                    Text(lang)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                }
                 Spacer()
                 Text(record.date, format: .dateTime.day().month().hour().minute())
                     .font(.caption)
@@ -109,7 +166,11 @@ struct DashboardHomeView: View {
     private var hotkeyCard: some View {
         HStack {
             Image(systemName: "keyboard")
-            Text("Зажмите **\(settings.hotkey.rawValue)** — говорите — отпустите.")
+            if settings.recordingMode == .toggle {
+                Text("Нажмите **\(settings.hotkey.rawValue)** для старта — говорите — нажмите ещё раз для завершения.")
+            } else {
+                Text("Зажмите **\(settings.hotkey.rawValue)** — говорите — отпустите.")
+            }
             Spacer()
             if settings.cleanupStyle != .off {
                 Text(settings.cleanupStyle.rawValue)

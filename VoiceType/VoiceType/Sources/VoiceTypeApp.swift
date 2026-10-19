@@ -3,16 +3,22 @@ import SwiftUI
 @main
 struct VoiceTypeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var settings = SettingsStore()
-    @StateObject private var history = HistoryStore()
+    @StateObject private var settings: SettingsStore
+    @StateObject private var history: HistoryStore
     @StateObject private var appState: AppState
 
     init() {
         let settingsStore = SettingsStore()
         let historyStore = HistoryStore()
+        let state = AppState(settings: settingsStore, history: historyStore)
         _settings = StateObject(wrappedValue: settingsStore)
         _history = StateObject(wrappedValue: historyStore)
-        _appState = StateObject(wrappedValue: AppState(settings: settingsStore, history: historyStore))
+        _appState = StateObject(wrappedValue: state)
+        DashboardWindowController.shared.configure(
+            appState: state,
+            settings: settingsStore,
+            history: historyStore
+        )
     }
 
     var body: some Scene {
@@ -20,6 +26,7 @@ struct VoiceTypeApp: App {
             MenuBarView()
                 .environmentObject(appState)
                 .environmentObject(settings)
+                .environmentObject(appState.meetings)
         } label: {
             MenuBarIcon(status: appState.status)
         }
@@ -30,6 +37,7 @@ struct VoiceTypeApp: App {
                 .environmentObject(appState)
                 .environmentObject(settings)
                 .environmentObject(history)
+                .environmentObject(appState.meetings)
         }
     }
 }

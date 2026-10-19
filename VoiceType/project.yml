@@ -14,9 +14,10 @@ targets:
       path: VoiceType/Resources/Info.plist
       properties:
         NSMicrophoneUsageDescription: "VoiceType записывает голос, чтобы превратить его в текст."
+        NSAudioCaptureUsageDescription: "VoiceType записывает системный звук во время встреч, чтобы распознавать речь собеседников."
         LSUIElement: false
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.2.0"
+        CFBundleVersion: "2"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farrukh.voicetype

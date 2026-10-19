@@ -14,4 +14,6 @@ DEST="$(pwd)/../VoiceType.app"
 rm -rf "$DEST"
 cp -R "$BUILT_APP/VoiceType.app" "$DEST"
 
+/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted "$DEST"
+
 codesign --verify --deep "$DEST" && echo "Готово: $DEST"
