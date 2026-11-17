@@ -23,6 +23,10 @@ enum DashboardSection: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: SettingsStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var chrome: VoiceChrome { VoiceChrome(scheme: colorScheme) }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -30,8 +34,11 @@ struct SettingsView: View {
             detail
         }
         .frame(minWidth: 920, minHeight: 620)
-        .background(Self.canvas)
-        .preferredColorScheme(.dark)
+        .background(chrome.canvas)
+        .preferredColorScheme(settings.appearance.colorScheme)
+        .onChange(of: settings.appearance) { _, mode in
+            DashboardWindowController.shared.applyAppearance(mode)
+        }
         .onAppear {
             if PermissionsHelper.microphoneStatus() == .notDetermined {
                 PermissionsHelper.requestMicrophone { _ in
@@ -44,12 +51,12 @@ struct SettingsView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("VoiceType")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(white: 0.62))
-                .padding(.horizontal, 4)
-                .padding(.bottom, 6)
+                .foregroundStyle(chrome.ink)
+                .padding(.horizontal, 6)
+                .padding(.bottom, 8)
 
             ForEach(DashboardSection.allCases) { section in
                 sidebarRow(section)
@@ -57,10 +64,15 @@ struct SettingsView: View {
             Spacer()
         }
         .padding(.top, 36)
-        .padding(.horizontal, 12)
-        .frame(width: 116)
+        .padding(.horizontal, 16)
+        .frame(width: 128)
         .frame(maxHeight: .infinity)
-        .background(Color(red: 0.145, green: 0.145, blue: 0.155))
+        .background(chrome.canvas)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(chrome.hairline)
+                .frame(width: 1)
+        }
     }
 
     private func sidebarRow(_ section: DashboardSection) -> some View {
@@ -68,33 +80,38 @@ struct SettingsView: View {
         return Button {
             appState.selectedSection = section
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 7) {
                 Image(systemName: section.systemImage)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                 Text(section.rawValue)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(selected ? Color.white : Color(white: 0.62))
-            .frame(width: 92, height: 92)
+            .foregroundStyle(selected ? Color.white : chrome.ink)
+            .frame(width: 96, height: 96)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(selected ? Color.white.opacity(0.08) : Color.white.opacity(0.035))
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(selected ? chrome.accent : chrome.card)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(selected ? Color.white.opacity(0.14) : Color.white.opacity(0.08))
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(selected ? Color.white.opacity(0.14) : chrome.hairline)
+            )
+            .shadow(
+                color: selected ? chrome.accent.opacity(0.32) : chrome.shadow,
+                radius: selected ? 12 : 8,
+                y: selected ? 6 : 3
             )
             .overlay(alignment: .topTrailing) {
                 if section == .meetings, appState.activeMeetingID != nil {
                     Circle()
                         .fill(Color.red)
-                        .frame(width: 7, height: 7)
-                        .padding(8)
+                        .frame(width: 8, height: 8)
+                        .padding(10)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -115,11 +132,66 @@ struct SettingsView: View {
                 DashboardSettingsView()
             }
         }
-        .padding(.top, 28)
+        .padding(.top, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(chrome.canvas)
+    }
+}
+
+struct VoiceChrome {
+    var scheme: ColorScheme
+
+    var canvas: Color {
+        scheme == .dark
+            ? Color(red: 0.075, green: 0.078, blue: 0.090)
+            : Color(red: 0.925, green: 0.933, blue: 0.953)
     }
 
-    private static let canvas = Color(red: 0.11, green: 0.11, blue: 0.118)
+    var card: Color {
+        scheme == .dark
+            ? Color(red: 0.133, green: 0.141, blue: 0.165)
+            : Color.white
+    }
+
+    var ink: Color {
+        scheme == .dark
+            ? Color.white.opacity(0.92)
+            : Color(red: 0.11, green: 0.12, blue: 0.15)
+    }
+
+    var quiet: Color {
+        scheme == .dark
+            ? Color.white.opacity(0.58)
+            : Color(red: 0.38, green: 0.41, blue: 0.48)
+    }
+
+    var accent: Color { Color(red: 0.231, green: 0.447, blue: 0.980) }
+
+    var hairline: Color {
+        scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08)
+    }
+
+    var shadow: Color {
+        scheme == .dark ? Color.black.opacity(0.35) : Color.black.opacity(0.06)
+    }
+
+    static let windowBackground: NSColor = NSColor(name: "VoiceTypeCanvas") { appearance in
+        let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        if dark {
+            return NSColor(srgbRed: 0.075, green: 0.078, blue: 0.090, alpha: 1)
+        }
+        return NSColor(srgbRed: 0.925, green: 0.933, blue: 0.953, alpha: 1)
+    }
+}
+
+extension AppearanceMode {
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
 }
 
 @MainActor
@@ -158,7 +230,7 @@ final class DashboardWindowController {
             newWindow.title = "VoiceType"
             newWindow.titleVisibility = .hidden
             newWindow.titlebarAppearsTransparent = true
-            newWindow.backgroundColor = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.118, alpha: 1)
+            newWindow.backgroundColor = VoiceChrome.windowBackground
             newWindow.isMovableByWindowBackground = false
             newWindow.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             newWindow.setContentSize(NSSize(width: 980, height: 660))
@@ -171,8 +243,21 @@ final class DashboardWindowController {
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
+        applyAppearance(settings.appearance)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+    }
+
+    func applyAppearance(_ mode: AppearanceMode) {
+        switch mode {
+        case .system:
+            window?.appearance = nil
+        case .light:
+            window?.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            window?.appearance = NSAppearance(named: .darkAqua)
+        }
+        window?.backgroundColor = VoiceChrome.windowBackground
     }
 }

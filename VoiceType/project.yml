@@ -15,6 +15,8 @@ targets:
       properties:
         NSMicrophoneUsageDescription: "VoiceType записывает голос, чтобы превратить его в текст."
         NSAudioCaptureUsageDescription: "VoiceType записывает системный звук во время встреч, чтобы распознавать речь собеседников."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         LSUIElement: false
         CFBundleShortVersionString: "0.2.0"
         CFBundleVersion: "2"

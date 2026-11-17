@@ -53,26 +53,7 @@ final class HistoryStore: ObservableObject {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        var loaded = (try? decoder.decode([TranscriptionRecord].self, from: data)) ?? []
-        var didMigrate = false
-        for i in loaded.indices {
-            if loaded[i].languageCode == "ru",
-               loaded[i].text.range(of: "[А-Яа-яЁё]", options: .regularExpression) == nil {
-                loaded[i] = TranscriptionRecord(
-                    id: loaded[i].id,
-                    date: loaded[i].date,
-                    text: RussianTransliterator.convertSentence(loaded[i].text),
-                    durationSeconds: loaded[i].durationSeconds,
-                    languageCode: loaded[i].languageCode,
-                    languageSummary: loaded[i].languageSummary
-                )
-                didMigrate = true
-            }
-        }
-        records = loaded
-        if didMigrate {
-            save()
-        }
+        records = (try? decoder.decode([TranscriptionRecord].self, from: data)) ?? []
     }
 
     private func save() {

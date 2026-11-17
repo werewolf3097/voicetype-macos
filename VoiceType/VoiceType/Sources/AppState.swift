@@ -21,8 +21,10 @@ final class AppState: ObservableObject {
     @Published var microphoneAuthorized: Bool = PermissionsHelper.microphoneAuthorized()
     @Published var inputMonitoringAuthorized: Bool = PermissionsHelper.inputMonitoringAuthorized()
     @Published var accessibilityAuthorized: Bool = PermissionsHelper.accessibilityAuthorized()
+    @Published var screenCaptureAuthorized: Bool = PermissionsHelper.screenCaptureAuthorized()
     @Published var activeMeetingID: UUID? = nil
     @Published var meetingElapsedSeconds: TimeInterval = 0
+    @Published var activeMeetingSystemAudioCapturing: Bool = false
 
     let settings: SettingsStore
     let history: HistoryStore
@@ -32,8 +34,13 @@ final class AppState: ObservableObject {
     private let hotkeys = HotkeyManager()
     private let indicator = RecordingIndicatorController()
     private var recordingStartedAt: Date?
+    private var dictationTask: Task<Void, Never>?
     private var meetingStartedAt: Date?
     private var meetingTimer: Timer?
+    private var meetingQueueTimer: Timer?
+    private var meetingTranscriptionTask: Task<Void, Never>?
+    private var activeTranscriptionMeetingID: UUID?
+    private var activeTranscriptionToken: UUID?
     private var lastNotifiedHotkeyIssue: HotkeyIssue?
     private var permissionsTimer: Timer?
 
@@ -50,7 +57,14 @@ final class AppState: ObservableObject {
         hotkeys.onStop = { [weak self] in self?.finishRecording() }
         hotkeys.onToggle = { [weak self] in self?.toggleRecording() }
         hotkeys.onCancel = { [weak self] in self?.cancelRecording() }
-        hotkeys.isRecording = { [weak self] in self?.status == .recording }
+        hotkeys.isRecording = { [weak self] in
+            switch self?.status {
+            case .recording, .transcribing, .cleaning:
+                return true
+            default:
+                return false
+            }
+        }
 
         self.refreshPermissionsAndHotkey(forceRestartTap: true)
 
@@ -81,12 +95,25 @@ final class AppState: ObservableObject {
                 self?.refreshPermissionsAndHotkey()
             }
         }
+
+        // Poll queued meetings every 30s so recordings waiting for farrukh-pc auto-transcribe on reconnect.
+        meetingQueueTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.processQueuedMeetingsIfNeeded()
+            }
+        }
+
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await self?.processQueuedMeetingsIfNeeded()
+        }
     }
 
     func refreshPermissionsAndHotkey(forceRestartTap: Bool = false) {
         let mic = PermissionsHelper.microphoneAuthorized()
         let inputMon = PermissionsHelper.inputMonitoringAuthorized()
         let ax = PermissionsHelper.accessibilityAuthorized()
+        let sc = PermissionsHelper.screenCaptureAuthorized()
 
         let permissionsChanged = (microphoneAuthorized != mic)
             || (inputMonitoringAuthorized != inputMon)
@@ -95,6 +122,7 @@ final class AppState: ObservableObject {
         if microphoneAuthorized != mic { microphoneAuthorized = mic }
         if inputMonitoringAuthorized != inputMon { inputMonitoringAuthorized = inputMon }
         if accessibilityAuthorized != ax { accessibilityAuthorized = ax }
+        if screenCaptureAuthorized != sc { screenCaptureAuthorized = sc }
 
         hotkeys.mode = settings.recordingMode
 
@@ -203,14 +231,22 @@ final class AppState: ObservableObject {
         }
 
         status = .transcribing
-        Task {
-            await transcribeAndInsert(fileURL: fileURL, durationSeconds: duration)
+        dictationTask?.cancel()
+        dictationTask = Task { [weak self] in
+            await self?.transcribeAndInsert(fileURL: fileURL, durationSeconds: duration)
         }
     }
 
     private func cancelRecording() {
-        guard status == .recording else { return }
+        switch status {
+        case .recording, .transcribing, .cleaning:
+            break
+        default:
+            return
+        }
         recordingStartedAt = nil
+        dictationTask?.cancel()
+        dictationTask = nil
         recorder.cancel()
         status = .idle
     }
@@ -224,28 +260,18 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let rawResult = try await GapiClient(token: settings.gapiToken).transcribe(fileURL: fileURL)
-            let result = UzbekDialectConverter.applyIfNeeded(rawResult, style: settings.uzbekStyle)
-            var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            try Task.checkCancellation()
+            let result = try await GapiClient(token: settings.gapiToken)
+                .transcribe(fileURL: fileURL)
+            try Task.checkCancellation()
+            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
             guard !text.isEmpty else {
                 status = .idle
                 return
             }
 
-            if settings.cleanupStyle != .off && !settings.anthropicApiKey.isEmpty {
-                status = .cleaning
-                do {
-                    text = try await ClaudeClient(apiKey: settings.anthropicApiKey)
-                        .cleanup(
-                            transcription: result,
-                            style: settings.cleanupStyle,
-                            uzbekStyle: settings.uzbekStyle
-                        )
-                } catch {
-                    // Preserve raw gapi transcript even if Claude post-processing fails
-                }
-            }
+            guard !Task.isCancelled else { return }
 
             lastText = text
             history.add(
@@ -265,7 +291,12 @@ final class AppState: ObservableObject {
                 }
             }
             status = .idle
+        } catch is CancellationError {
+            return
+        } catch let error as URLError where error.code == .cancelled {
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             status = .error(error.localizedDescription)
         }
     }
@@ -298,11 +329,16 @@ final class AppState: ObservableObject {
             activeMeetingID = draft.id
             meetingStartedAt = Date()
             meetingElapsedSeconds = 0
+            activeMeetingSystemAudioCapturing = false
             meetingTimer?.invalidate()
             meetingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, let started = self.meetingStartedAt else { return }
                     self.meetingElapsedSeconds = Date().timeIntervalSince(started)
+                    let sysActive = self.meetingRecorder.systemAudioActive
+                    if self.activeMeetingSystemAudioCapturing != sysActive {
+                        self.activeMeetingSystemAudioCapturing = sysActive
+                    }
                 }
             }
             return draft.id
@@ -322,6 +358,7 @@ final class AppState: ObservableObject {
         meetingStartedAt = nil
         activeMeetingID = nil
         meetingElapsedSeconds = 0
+        activeMeetingSystemAudioCapturing = false
 
         meetings.update(meetingID) { record in
             record.durationSeconds = duration
@@ -337,11 +374,17 @@ final class AppState: ObservableObject {
                 return
             }
 
-            await processMeetingRecording(
-                meetingID: meetingID,
-                output: output,
-                fallbackDuration: duration
-            )
+            meetings.update(meetingID) { record in
+                record.audioFileName = output.micFileURL.lastPathComponent
+                record.sysAudioFileName = output.sysFileURL?.lastPathComponent
+                record.stereoParties = output.stereoParties
+                record.speakerNames = output.stereoParties ? [0: "Вы", 1: "Собеседники"] : [:]
+                if record.durationSeconds <= 0 {
+                    record.durationSeconds = duration
+                }
+            }
+
+            await transcribeMeetingOnWindowsOrQueue(meetingID: meetingID)
         }
     }
 
@@ -352,6 +395,7 @@ final class AppState: ObservableObject {
         meetingStartedAt = nil
         activeMeetingID = nil
         meetingElapsedSeconds = 0
+        activeMeetingSystemAudioCapturing = false
 
         Task {
             await meetingRecorder.cancel()
@@ -359,16 +403,33 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func processMeetingRecording(
-        meetingID: UUID,
-        output: MeetingRecordingOutput,
-        fallbackDuration: Double
-    ) async {
-        let keepAudio = settings.keepMeetingAudio
-        defer {
-            if !keepAudio {
-                try? FileManager.default.removeItem(at: output.fileURL)
+    func deleteMeeting(_ meetingID: UUID) {
+        if activeMeetingID == meetingID {
+            cancelMeeting()
+            return
+        }
+        if activeTranscriptionMeetingID == meetingID {
+            meetingTranscriptionTask?.cancel()
+            meetingTranscriptionTask = nil
+            activeTranscriptionMeetingID = nil
+            activeTranscriptionToken = nil
+        }
+        meetings.delete(meetingID)
+    }
+
+    func retryMeetingOnWindows(_ meetingID: UUID) {
+        Task {
+            await transcribeMeetingOnWindowsOrQueue(meetingID: meetingID)
+        }
+    }
+
+    func transcribeMeetingUrgentGapi(_ meetingID: UUID) {
+        guard let current = meetings.meeting(withID: meetingID) else { return }
+        guard let micURL = meetings.audioFileURL(for: current) else {
+            meetings.update(meetingID) { record in
+                record.status = .error("Аудиофайл mic.wav не найден.")
             }
+            return
         }
 
         guard !settings.gapiToken.isEmpty else {
@@ -378,42 +439,249 @@ final class AppState: ObservableObject {
             return
         }
 
-        do {
-            let client = GapiClient(token: settings.gapiToken)
-            let rawTranscription = try await client.transcribeMeeting(
-                fileURL: output.fileURL,
-                stereoParties: output.stereoParties,
-                enableSummary: settings.enableGapiSummary
-            ) { [weak self] progressSec in
-                Task { @MainActor in
-                    self?.meetings.update(meetingID) { record in
-                        record.progressSeconds = progressSec
+        if let existingTask = meetingTranscriptionTask {
+            existingTask.cancel()
+        }
+
+        let sysURL = meetings.sysAudioFileURL(for: current)
+        let token = UUID()
+        activeTranscriptionMeetingID = meetingID
+        activeTranscriptionToken = token
+
+        meetingTranscriptionTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.activeTranscriptionToken == token {
+                    self.activeTranscriptionMeetingID = nil
+                    self.activeTranscriptionToken = nil
+                    self.meetingTranscriptionTask = nil
+                }
+            }
+
+            self.meetings.update(meetingID) { record in
+                record.status = .transcribing
+                record.progressSeconds = 0
+                record.transcriptionEngine = "gapi.uz"
+            }
+
+            var uploadURL = micURL
+            var stereoParties = false
+            var tempStereoURL: URL? = nil
+
+            if let sysURL {
+                let candidateURL = self.meetings.folderURL(for: meetingID).appendingPathComponent("stereo_gapi.wav")
+                try? FileManager.default.removeItem(at: candidateURL)
+                let combined = await Task.detached(priority: .userInitiated) {
+                    MeetingAudioRecorder.combineMonoWAVsIntoStereo(
+                        leftURL: micURL,
+                        rightURL: sysURL,
+                        outputURL: candidateURL
+                    )
+                }.value
+                if combined {
+                    uploadURL = candidateURL
+                    stereoParties = true
+                    tempStereoURL = candidateURL
+                }
+            }
+
+            defer {
+                if let tempStereoURL {
+                    try? FileManager.default.removeItem(at: tempStereoURL)
+                }
+            }
+
+            do {
+                try Task.checkCancellation()
+                let client = GapiClient(token: self.settings.gapiToken)
+                let rawTranscription = try await client.transcribeMeeting(
+                    fileURL: uploadURL,
+                    stereoParties: stereoParties,
+                    enableSummary: self.settings.enableGapiSummary
+                ) { [weak self] progressSec in
+                    Task { @MainActor in
+                        guard let self, self.activeTranscriptionToken == token else { return }
+                        self.meetings.update(meetingID) { record in
+                            record.progressSeconds = progressSec
+                        }
                     }
                 }
-            }
-            let transcription = UzbekDialectConverter.applyIfNeeded(rawTranscription, style: settings.uzbekStyle)
 
-            meetings.update(meetingID) { record in
-                record.stereoParties = transcription.stereoParties ?? output.stereoParties
-                record.segments = transcription.segments
-                record.languageCode = transcription.languageCode
-                record.languageSummary = transcription.languageSummary
-                record.gapiSummary = transcription.summaryText
-                if let audioSec = transcription.audioSeconds, audioSec > 0 {
-                    record.durationSeconds = audioSec
-                } else if record.durationSeconds <= 0 {
-                    record.durationSeconds = fallbackDuration
+                try Task.checkCancellation()
+                let transcription = UzbekDialectConverter.applyIfNeeded(rawTranscription, style: self.settings.uzbekStyle)
+
+                self.meetings.update(meetingID) { record in
+                    record.stereoParties = transcription.stereoParties ?? stereoParties
+                    record.segments = transcription.segments
+                    record.languageCode = transcription.languageCode
+                    record.languageSummary = transcription.languageSummary
+                    record.gapiSummary = transcription.summaryText
+                    record.transcriptionEngine = "gapi.uz"
+                    if let audioSec = transcription.audioSeconds, audioSec > 0 {
+                        record.durationSeconds = audioSec
+                    }
+                    record.status = .summarizing
                 }
-                record.audioFileName = keepAudio ? output.fileURL.lastPathComponent : nil
-                record.status = .summarizing
+
+                self.cleanupAudioIfNotKeeping(for: meetingID, micURL: micURL, sysURL: sysURL)
+                await self.regenerateRecap(for: meetingID)
+            } catch is CancellationError {
+                return
+            } catch let error as URLError where error.code == .cancelled {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.meetings.update(meetingID) { record in
+                    record.status = .error("Ошибка gapi.uz: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func transcribeMeetingOnWindowsOrQueue(meetingID: UUID) async {
+        guard let current = meetings.meeting(withID: meetingID) else { return }
+        guard let micURL = meetings.audioFileURL(for: current) else {
+            meetings.update(meetingID) { record in
+                record.status = .error("Аудиофайл mic.wav не найден.")
+            }
+            return
+        }
+
+        if let busyID = activeTranscriptionMeetingID, busyID != meetingID {
+            meetings.update(meetingID) { record in
+                record.status = .queued("В очереди за другой расшифровкой")
+            }
+            return
+        }
+
+        if activeTranscriptionMeetingID == meetingID {
+            meetingTranscriptionTask?.cancel()
+            meetingTranscriptionTask = nil
+        }
+
+        let client = WhisperWindowsClient(baseURLString: settings.whisperServerURL)
+        let reachable = await client.isReachable(timeout: 2.5)
+        guard reachable else {
+            meetings.update(meetingID) { record in
+                record.status = .queued("Ожидает farrukh-pc в Tailscale (либо нажмите «Срочно через gapi.uz»)")
+            }
+            return
+        }
+
+        let sysURL = meetings.sysAudioFileURL(for: current)
+        let token = UUID()
+        activeTranscriptionMeetingID = meetingID
+        activeTranscriptionToken = token
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.activeTranscriptionToken == token {
+                    self.activeTranscriptionMeetingID = nil
+                    self.activeTranscriptionToken = nil
+                    self.meetingTranscriptionTask = nil
+                }
             }
 
-            await regenerateRecap(for: meetingID)
-        } catch {
-            meetings.update(meetingID) { record in
-                record.audioFileName = keepAudio ? output.fileURL.lastPathComponent : nil
-                record.status = .error(error.localizedDescription)
+            self.meetings.update(meetingID) { record in
+                record.status = .transcribing
+                record.progressSeconds = 0
+                record.transcriptionEngine = "farrukh-pc (Whisper large-v3-turbo)"
             }
+
+            do {
+                let transcription = try await client.transcribeMeeting(
+                    micURL: micURL,
+                    sysURL: sysURL
+                ) { [weak self] progressSec in
+                    Task { @MainActor in
+                        guard let self, self.activeTranscriptionToken == token else { return }
+                        self.meetings.update(meetingID) { record in
+                            record.progressSeconds = progressSec
+                        }
+                    }
+                }
+
+                try Task.checkCancellation()
+
+                self.meetings.update(meetingID) { record in
+                    record.stereoParties = transcription.stereoParties ?? (sysURL != nil)
+                    record.segments = transcription.segments
+                    record.languageCode = transcription.languageCode ?? "ru"
+                    record.languageSummary = "Русский"
+                    record.transcriptionEngine = "farrukh-pc (Whisper large-v3-turbo)"
+                    if let audioSec = transcription.audioSeconds, audioSec > 0 {
+                        record.durationSeconds = audioSec
+                    }
+                    record.status = .summarizing
+                }
+
+                self.cleanupAudioIfNotKeeping(for: meetingID, micURL: micURL, sysURL: sysURL)
+                await self.regenerateRecap(for: meetingID)
+            } catch is CancellationError {
+                return
+            } catch let error as URLError where error.code == .cancelled {
+                return
+            } catch let error as WhisperWindowsError {
+                guard !Task.isCancelled else { return }
+                switch error {
+                case .serverUnavailable:
+                    self.meetings.update(meetingID) { record in
+                        record.status = .queued("Связь с farrukh-pc прервалась — запись сохранена в очереди")
+                    }
+                default:
+                    self.meetings.update(meetingID) { record in
+                        record.status = .error(error.localizedDescription)
+                    }
+                }
+            } catch is URLError {
+                guard !Task.isCancelled else { return }
+                self.meetings.update(meetingID) { record in
+                    record.status = .queued("Связь с farrukh-pc прервалась — запись сохранена в очереди")
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.meetings.update(meetingID) { record in
+                    record.status = .error(error.localizedDescription)
+                }
+            }
+        }
+
+        meetingTranscriptionTask = task
+        await task.value
+    }
+
+    func processQueuedMeetingsIfNeeded() async {
+        guard activeTranscriptionMeetingID == nil else { return }
+        let queued = meetings.meetings.filter {
+            if case .queued = $0.status { return true }
+            return false
+        }
+        guard !queued.isEmpty else { return }
+
+        let client = WhisperWindowsClient(baseURLString: settings.whisperServerURL)
+        guard await client.isReachable(timeout: 2.0) else { return }
+
+        for meeting in queued.reversed() {
+            if activeTranscriptionMeetingID != nil { break }
+            await transcribeMeetingOnWindowsOrQueue(meetingID: meeting.id)
+            if let updated = meetings.meeting(withID: meeting.id),
+               case .queued = updated.status {
+                // Server went offline mid-batch; stop processing until next timer tick
+                break
+            }
+        }
+    }
+
+    private func cleanupAudioIfNotKeeping(for meetingID: UUID, micURL: URL, sysURL: URL?) {
+        guard !settings.keepMeetingAudio else { return }
+        try? FileManager.default.removeItem(at: micURL)
+        if let sysURL {
+            try? FileManager.default.removeItem(at: sysURL)
+        }
+        meetings.update(meetingID) { record in
+            record.audioFileName = nil
+            record.sysAudioFileName = nil
         }
     }
 

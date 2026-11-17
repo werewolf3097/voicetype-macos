@@ -49,6 +49,14 @@ enum CleanupStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum AppearanceMode: String, CaseIterable, Identifiable {
+    case system = "Как в системе"
+    case light = "Светлая"
+    case dark = "Тёмная"
+
+    var id: String { rawValue }
+}
+
 enum RecordingMode: String, CaseIterable, Identifiable {
     case toggle = "По нажатию (старт / стоп)"
     case hold = "По удержанию (push-to-talk)"
@@ -79,6 +87,9 @@ final class SettingsStore: ObservableObject {
     @Published var uzbekStyle: UzbekStyle {
         didSet { UserDefaults.standard.set(uzbekStyle.rawValue, forKey: "uzbekStyle") }
     }
+    @Published var appearance: AppearanceMode {
+        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "appearance") }
+    }
     @Published var showDockIcon: Bool {
         didSet {
             UserDefaults.standard.set(showDockIcon, forKey: "showDockIcon")
@@ -94,6 +105,15 @@ final class SettingsStore: ObservableObject {
     @Published var keepMeetingAudio: Bool {
         didSet { UserDefaults.standard.set(keepMeetingAudio, forKey: "keepMeetingAudio") }
     }
+    @Published var whisperServerURL: String {
+        didSet { UserDefaults.standard.set(whisperServerURL, forKey: "whisperServerURL") }
+    }
+    @Published var obsidianRecapsFolder: String {
+        didSet { UserDefaults.standard.set(obsidianRecapsFolder, forKey: "obsidianRecapsFolder") }
+    }
+    @Published var autoExportToObsidian: Bool {
+        didSet { UserDefaults.standard.set(autoExportToObsidian, forKey: "autoExportToObsidian") }
+    }
 
     @Published var gapiToken: String {
         didSet { KeychainStore.set(gapiToken, forKey: "gapiToken") }
@@ -102,6 +122,8 @@ final class SettingsStore: ObservableObject {
         didSet { KeychainStore.set(anthropicApiKey, forKey: "anthropicApiKey") }
     }
 
+    static let defaultObsidianRecapsFolder = "/Users/farrukh/Library/Mobile Documents/iCloud~md~obsidian/Documents/Рекапы встреч"
+
     init() {
         let defaults = UserDefaults.standard
         self.hotkey = PushToTalkKey(rawValue: defaults.string(forKey: "hotkey") ?? "") ?? .rightOption
@@ -109,10 +131,14 @@ final class SettingsStore: ObservableObject {
         self.autoPaste = defaults.object(forKey: "autoPaste") as? Bool ?? true
         self.cleanupStyle = CleanupStyle(rawValue: defaults.string(forKey: "cleanupStyle") ?? "") ?? .grammar
         self.uzbekStyle = UzbekStyle(rawValue: defaults.string(forKey: "uzbekStyle") ?? "") ?? .tashkent
+        self.appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         self.showDockIcon = defaults.object(forKey: "showDockIcon") as? Bool ?? true
         self.meetingAudioSource = MeetingAudioSource(rawValue: defaults.string(forKey: "meetingAudioSource") ?? "") ?? .micAndSystem
         self.enableGapiSummary = defaults.object(forKey: "enableGapiSummary") as? Bool ?? false
         self.keepMeetingAudio = defaults.object(forKey: "keepMeetingAudio") as? Bool ?? false
+        self.whisperServerURL = defaults.string(forKey: "whisperServerURL") ?? WhisperWindowsClient.defaultURLString
+        self.obsidianRecapsFolder = defaults.string(forKey: "obsidianRecapsFolder") ?? Self.defaultObsidianRecapsFolder
+        self.autoExportToObsidian = defaults.object(forKey: "autoExportToObsidian") as? Bool ?? false
         self.gapiToken = KeychainStore.get("gapiToken") ?? ""
         self.anthropicApiKey = KeychainStore.get("anthropicApiKey") ?? ""
         DockIconController.apply(visible: self.showDockIcon)

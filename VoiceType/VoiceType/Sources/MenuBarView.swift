@@ -77,6 +77,7 @@ struct MenuBarView: View {
         }
         .padding(12)
         .frame(width: 260)
+        .preferredColorScheme(settings.appearance.colorScheme)
         .onAppear { appState.refreshPermissionsAndHotkey() }
     }
 

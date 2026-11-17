@@ -23,6 +23,15 @@ struct DashboardSettingsView: View {
                 }
 
                 settingsGroup("Приложение") {
+                    row("Оформление", caption: "По умолчанию окно совпадает с темой macOS.") {
+                        Picker("", selection: $settings.appearance) {
+                            ForEach(AppearanceMode.allCases) { mode in
+                                Text(mode.rawValue).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 240)
+                    }
                     row("Значок в Dock", caption: "Меню в строке статуса доступно в любом случае — это только про значок в Dock.") {
                         Toggle("", isOn: $settings.showDockIcon)
                             .labelsHidden()
@@ -43,7 +52,7 @@ struct DashboardSettingsView: View {
                             appState.restartHotkeyListener()
                         }
                     }
-                    row("Режим записи", caption: "«По нажатию» — нажали один раз для старта, нажали ещё раз для завершения (Esc — отмена).") {
+                    row("Режим записи", caption: "«По нажатию» — нажали один раз для старта, нажали ещё раз для отправки. Escape отменяет запись: файл удаляется и на сервер не уходит.") {
                         Picker("", selection: $settings.recordingMode) {
                             ForEach(RecordingMode.allCases) { mode in
                                 Text(mode.rawValue).tag(mode)
@@ -83,10 +92,18 @@ struct DashboardSettingsView: View {
                     }
                 }
 
-                settingsGroup("Встречи (Granola)") {
+                settingsGroup("Встречи") {
+                    row(
+                        "Сервер Whisper (farrukh-pc)",
+                        caption: "Основной вычислитель по Tailscale (whisper large-v3-turbo). Если недоступен, запись ждёт в очереди или отправляется вручную в gapi.uz."
+                    ) {
+                        TextField("", text: $settings.whisperServerURL)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 380)
+                    }
                     row(
                         "Источник звука встреч",
-                        caption: "«Микрофон + Системный звук» разделяет каналы («Вы» и «Собеседник») через бесплатный стерео-режим gapi."
+                        caption: "«Микрофон + Системный звук» разделяет каналы («Вы» и «Собеседники») без нагрузки на CPU."
                     ) {
                         Picker("", selection: $settings.meetingAudioSource) {
                             ForEach(MeetingAudioSource.allCases) { source in
@@ -97,8 +114,16 @@ struct DashboardSettingsView: View {
                         .frame(width: 240)
                     }
                     row(
+                        "Автоэкспорт в Obsidian",
+                        caption: "Сохранять готовый Markdown-рекап (*_vt.md) в «\(settings.obsidianRecapsFolder)»."
+                    ) {
+                        Toggle("", isOn: $settings.autoExportToObsidian)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    row(
                         "Резюме от gapi (×1.3)",
-                        caption: "Если выключено (по умолчанию), используется бесплатный тариф ×1.0, а рекап строится локально или через Claude."
+                        caption: "Применимо только при экстренной отправке в gapi.uz. По умолчанию выключено (бесплатный тариф ×1.0)."
                     ) {
                         Toggle("", isOn: $settings.enableGapiSummary)
                             .labelsHidden()
@@ -106,7 +131,7 @@ struct DashboardSettingsView: View {
                     }
                     row(
                         "Сохранять аудиозаписи",
-                        caption: "Если выключено (как в Granola), WAV-файл встречи удаляется после успешной транскрибации, оставляя только рекап и транскрипт."
+                        caption: "Если выключено, mic.wav и sys.wav удаляются после успешной расшифровки. Пока запись в очереди или в ошибке, файлы сохраняются всегда."
                     ) {
                         Toggle("", isOn: $settings.keepMeetingAudio)
                             .labelsHidden()
@@ -146,6 +171,15 @@ struct DashboardSettingsView: View {
                             buttonTitle: appState.accessibilityAuthorized ? "Открыть настройки" : "Разрешить"
                         ) {
                             PermissionsHelper.openAccessibilitySettings()
+                        }
+                    }
+                    row("Системный звук (Screen Recording)", caption: "Нужен для записи голоса собеседников (sys.wav) во время встреч. После пересборки тумблер может потребоваться переключить.") {
+                        permissionControl(
+                            status: appState.screenCaptureAuthorized ? "Разрешён" : "Нужно разрешить",
+                            granted: appState.screenCaptureAuthorized,
+                            buttonTitle: appState.screenCaptureAuthorized ? "Открыть настройки" : "Разрешить"
+                        ) {
+                            PermissionsHelper.openScreenCaptureSettings()
                         }
                     }
                 }

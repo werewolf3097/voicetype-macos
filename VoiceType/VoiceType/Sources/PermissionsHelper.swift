@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import IOKit.hid
 
 enum PermissionsHelper {
@@ -71,6 +72,20 @@ enum PermissionsHelper {
         } else {
             open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
         }
+    }
+
+    static func screenCaptureAuthorized() -> Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    @discardableResult
+    static func requestScreenCapture() -> Bool {
+        CGRequestScreenCaptureAccess()
+    }
+
+    static func openScreenCaptureSettings() {
+        _ = requestScreenCapture()
+        open("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     }
 
     static func relaunchApp() {

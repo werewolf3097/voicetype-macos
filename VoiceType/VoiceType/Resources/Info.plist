@@ -20,6 +20,11 @@
 	<string>2</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>VoiceType записывает системный звук во время встреч, чтобы распознавать речь собеседников.</string>
 	<key>NSMicrophoneUsageDescription</key>

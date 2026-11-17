@@ -4,16 +4,32 @@ struct DashboardHomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var history: HistoryStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var chrome: VoiceChrome { VoiceChrome(scheme: colorScheme) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Говорите, не печатайте")
-                    .font(.system(size: 32, weight: .bold))
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .center, spacing: 16) {
+                    Text("Говорите, не печатайте")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(chrome.ink)
+                    Spacer(minLength: 12)
+                    statusPill
+                }
 
-                statusCard
+                if case .error(let message) = appState.status {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
 
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                if showsPermissionCard {
+                    permissionCard
+                }
+
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
                     statTile(title: "Расшифровок", value: "\(history.records.count)")
                     statTile(title: "Слов надиктовано", value: "\(totalWords)")
                     if let wpm = averageWordsPerMinute {
@@ -28,31 +44,39 @@ struct DashboardHomeView: View {
 
                 hotkeyCard
             }
-            .padding(24)
+            .padding(.horizontal, 28)
+            .padding(.top, 20)
+            .padding(.bottom, 24)
         }
+        .scrollIndicators(.hidden)
     }
 
-    private var statusCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                statusIcon
-                    .font(.title2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(statusTitle).font(.headline)
-                    if case .error(let message) = appState.status {
-                        Text(message).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-            }
+    private var statusPill: some View {
+        HStack(spacing: 8) {
+            statusIcon
+                .font(.system(size: 13, weight: .semibold))
+            Text(statusTitle)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(chrome.ink)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(chrome.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(chrome.hairline))
+    }
 
+    private var showsPermissionCard: Bool {
+        !appState.hotkeyActive
+            || !appState.microphoneAuthorized
+            || (settings.autoPaste && !appState.accessibilityAuthorized)
+    }
+
+    private var permissionCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
             if !appState.hotkeyActive {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                permissionRow(systemImage: "exclamationmark.triangle.fill") {
                     if appState.inputMonitoringAuthorized {
                         Text("Мониторинг ввода разрешён, но нужен перезапуск приложения.")
-                            .font(.caption)
                         Spacer()
                         Button("Перезапустить") {
                             PermissionsHelper.relaunchApp()
@@ -60,7 +84,6 @@ struct DashboardHomeView: View {
                         .controlSize(.small)
                     } else {
                         Text("Мониторинг ввода не разрешён — хоткей не работает вне этого окна.")
-                            .font(.caption)
                         Spacer()
                         Button("Разрешить") {
                             PermissionsHelper.openInputMonitoringSettings()
@@ -71,11 +94,11 @@ struct DashboardHomeView: View {
             }
 
             if !appState.microphoneAuthorized {
-                HStack {
-                    Image(systemName: "mic.slash.fill")
-                        .foregroundStyle(.orange)
+                if !appState.hotkeyActive {
+                    Divider()
+                }
+                permissionRow(systemImage: "mic.slash.fill") {
                     Text("Доступ к микрофону не разрешён — запись голоса невозможна.")
-                        .font(.caption)
                     Spacer()
                     Button("Разрешить") {
                         PermissionsHelper.openMicrophoneSettings()
@@ -85,11 +108,11 @@ struct DashboardHomeView: View {
             }
 
             if settings.autoPaste && !appState.accessibilityAuthorized {
-                HStack {
-                    Image(systemName: "hand.raised.fill")
-                        .foregroundStyle(.orange)
+                if !appState.hotkeyActive || !appState.microphoneAuthorized {
+                    Divider()
+                }
+                permissionRow(systemImage: "hand.raised.fill") {
                     Text("Accessibility не разрешён — автовставка (Cmd+V) в поля ввода не сработает.")
-                        .font(.caption)
                     Spacer()
                     Button("Разрешить") {
                         PermissionsHelper.openAccessibilitySettings()
@@ -98,16 +121,30 @@ struct DashboardHomeView: View {
                 }
             }
         }
-        .padding(16)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+        .voiceCard(chrome)
+    }
+
+    private func permissionRow<Content: View>(
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.orange)
+                .frame(width: 16)
+            content()
+                .font(.caption)
+                .foregroundStyle(chrome.ink)
+        }
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
     private var statusIcon: some View {
         switch appState.status {
-        case .idle: Image(systemName: "mic").foregroundStyle(.secondary)
+        case .idle: Image(systemName: "mic").foregroundStyle(chrome.accent)
         case .recording: Image(systemName: "mic.fill").foregroundStyle(.red)
-        case .transcribing, .cleaning: Image(systemName: "waveform").foregroundStyle(.blue)
+        case .transcribing, .cleaning: Image(systemName: "waveform").foregroundStyle(chrome.accent)
         case .error: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
         }
     }
@@ -123,65 +160,65 @@ struct DashboardHomeView: View {
     }
 
     private func statTile(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(.system(size: 26, weight: .bold))
-            Text(title).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(value)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(chrome.ink)
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(chrome.quiet)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        .voiceCard(chrome)
     }
 
     private func lastTranscriptCard(_ record: TranscriptionRecord) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Последняя расшифровка").font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("Последняя расшифровка")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(chrome.ink)
                 if let lang = record.languageSummary, !lang.isEmpty {
                     Text(lang)
-                        .font(.caption2.weight(.medium))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(chrome.accent)
                         .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
+                        .padding(.vertical, 3)
+                        .background(chrome.accent.opacity(0.12), in: Capsule())
                 }
                 Spacer()
                 Text(record.date, format: .dateTime.day().month().hour().minute())
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(chrome.quiet)
             }
             Text(record.text)
-                .font(.body)
+                .font(.system(size: 15))
+                .foregroundStyle(chrome.ink)
                 .lineLimit(4)
             Button("Скопировать снова") {
                 TextInjector.copyToClipboard(record.text)
             }
             .font(.caption)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        .voiceCard(chrome)
     }
 
     private var hotkeyCard: some View {
-        HStack {
+        HStack(spacing: 8) {
             Image(systemName: "keyboard")
             if settings.recordingMode == .toggle {
-                Text("Нажмите **\(settings.hotkey.rawValue)** для старта — говорите — нажмите ещё раз для завершения.")
+                Text("Нажмите **\(settings.hotkey.rawValue)** для старта — говорите — нажмите ещё раз для завершения. **Escape** отменяет и ничего не отправляет.")
             } else {
-                Text("Зажмите **\(settings.hotkey.rawValue)** — говорите — отпустите.")
+                Text("Зажмите **\(settings.hotkey.rawValue)** — говорите — отпустите. **Escape** отменяет и ничего не отправляет.")
             }
-            Spacer()
-            if settings.cleanupStyle != .off {
-                Text(settings.cleanupStyle.rawValue)
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary, in: Capsule())
-            }
+            Spacer(minLength: 12)
         }
         .font(.callout)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(chrome.quiet)
+        .padding(.top, 4)
     }
 
     private var totalWords: Int {
@@ -201,5 +238,17 @@ struct DashboardHomeView: View {
         let calendar = Calendar.current
         let days = Set(history.records.map { calendar.startOfDay(for: $0.date) })
         return days.count
+    }
+}
+
+private extension View {
+    func voiceCard(_ chrome: VoiceChrome) -> some View {
+        padding(16)
+            .background(chrome.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(chrome.hairline)
+            )
+            .shadow(color: chrome.shadow, radius: 10, y: 4)
     }
 }

@@ -56,7 +56,7 @@ struct ClaudeClient {
 
         let body = RequestBody(
             model: fastModel,
-            max_tokens: 1024,
+            max_tokens: 4096,
             system: systemPrompt,
             messages: [.init(role: "user", content: userContent)]
         )
@@ -81,9 +81,13 @@ struct ClaudeClient {
         let hasRussian = transcription.languageCode == "ru"
             || (transcription.languageShare?["ru"] ?? 0) > 0.05
             || transcription.segments.contains(where: { $0.languageCode == "ru" })
+        let hasUzbek = transcription.languageCode == "uz"
+            || transcription.languageCode == "uz-khorezm"
+            || (transcription.languageShare?["uz"] ?? 0) > 0.05
+            || transcription.segments.contains { $0.languageCode == "uz" || $0.languageCode == "uz-khorezm" }
 
         var extra: [String] = [
-            "Важная особенность движка распознавания (gapi.uz): акустическая модель всегда выводит буквы только латиницей (узбекская латиница), даже когда человек говорит по-русски."
+            "Текст уже в письменной форме: русский записан кириллицей, узбекский — латиницей. Не транслитерируй заново и не переводи. Не сокращай и не выкидывай предложения, имена и названия. Расставь пунктуацию, убери слова-паразиты и самоисправления, поправь очевидный сбой распознавания (пропущенные ь и ы, ш вместо щ, название компании, которое слышно как «эпам»). Аббревиатуры пиши как принято, целиком."
         ]
 
         if let lang = transcription.languageCode {
@@ -96,15 +100,15 @@ struct ClaudeClient {
             } else {
                 shareInfo = ""
             }
-            extra.append("Аудио-детектор языка gapi определил основной язык записи: \(lang)\(shareInfo).")
+            extra.append("Язык записи: \(lang)\(shareInfo).")
         }
 
-        if hasRussian {
-            extra.append("Так как в записи обнаружена русская речь (код `ru`), записанная фонетической латиницей, обязательно восстанови русскую речь в стандартную русскую кириллицу (а узбекские фразы, если речь смешанная uz+ru, оставь на узбекской латинице).")
+        if hasRussian && hasUzbek {
+            extra.append("Смешанная речь: русские фразы оставь кириллицей, узбекские — латиницей.")
         }
 
-        if uzbekStyle == .tashkent {
-            extra.append("ВАЖНО ДЛЯ УЗБЕКСКОГО ЯЗЫКА: ни в коем случае НЕ переводи узбекскую речь в книжный литературный стиль (Adabiy til). Сохраняй и используй живой ташкентский разговорный диалект (Toshkent shevasi): формы на -vomman, -vosan, -votti, -vommiz, -vossiz, -votgan (например: qivommiz, kevotti, bo'votti, ishlavomman, etvotti, qatta, botta, shotta).")
+        if hasUzbek && uzbekStyle == .tashkent {
+            extra.append("Узбекские фразы оставь живым ташкентским диалектом (qivommiz, kevotti, qatta), не переводи их в книжный узбекский.")
         }
 
         return ([base] + extra).joined(separator: "\n\n")
@@ -137,7 +141,7 @@ struct ClaudeClient {
 
         let transcriptLines = meeting.segments
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .prefix(400)
+            .prefix(1500)
             .map { seg in
                 let ts = MeetingRecord.formatTimestamp(seg.start)
                 let speaker = meeting.displayName(for: seg.speaker)
@@ -167,7 +171,7 @@ struct ClaudeClient {
 
         let body = RequestBody(
             model: recapModel,
-            max_tokens: 2048,
+            max_tokens: 4096,
             system: systemPrompt,
             messages: [.init(role: "user", content: userParts.joined(separator: "\n\n"))]
         )

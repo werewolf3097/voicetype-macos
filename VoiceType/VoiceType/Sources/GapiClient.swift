@@ -147,7 +147,7 @@ struct GapiClient {
         let summary: SummaryInfo?
         let segments: [SegmentResult]?
 
-        func toTranscription() -> GapiTranscription {
+        func toTranscription(applyLocalFixes: Bool = true) -> GapiTranscription {
             let mappedSegments: [GapiTranscription.Segment] = (segments ?? []).enumerated().map { idx, seg in
                 let segText = seg.formatted_text ?? seg.text ?? seg.raw_asr_text ?? ""
                 return GapiTranscription.Segment(
@@ -190,6 +190,7 @@ struct GapiClient {
                 speakerCount: speakers,
                 audioSeconds: audio_seconds
             )
+            guard applyLocalFixes else { return rawTranscription }
             return RussianTransliterator.applyIfNeeded(rawTranscription)
         }
     }
@@ -215,7 +216,7 @@ struct GapiClient {
         let terms: [String]
     }
 
-    func transcribe(fileURL: URL) async throws -> GapiTranscription {
+    func transcribe(fileURL: URL, applyLocalFixes: Bool = true) async throws -> GapiTranscription {
         let boundary = "voicetype-\(UUID().uuidString)"
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/transcribe"))
         request.httpMethod = "POST"
@@ -231,7 +232,7 @@ struct GapiClient {
 
         if http.statusCode == 200 {
             let result = try JSONDecoder().decode(TranscribeResult.self, from: data)
-            return result.toTranscription()
+            return result.toTranscription(applyLocalFixes: applyLocalFixes)
         }
 
         if http.statusCode == 202 {
@@ -239,7 +240,7 @@ struct GapiClient {
             guard let jobId = accepted.resolvedId else {
                 throw GapiError(code: "missing_job_id", hint: "Сервер вернул 202 без идентификатора задачи")
             }
-            return try await pollForResult(jobId: jobId)
+            return try await pollForResult(jobId: jobId, applyLocalFixes: applyLocalFixes)
         }
 
         throw try decodeError(data)
@@ -312,12 +313,14 @@ struct GapiClient {
     private func pollForResult(
         jobId: String,
         maxPolls: Int = 60,
+        applyLocalFixes: Bool = true,
         onProgress: (@Sendable (Double?) -> Void)? = nil
     ) async throws -> GapiTranscription {
         let statusURL = baseURL.appendingPathComponent("v1/jobs/\(jobId)")
         let resultURL = baseURL.appendingPathComponent("v1/jobs/\(jobId)/result")
 
         for _ in 0..<maxPolls {
+            try Task.checkCancellation()
             try await Task.sleep(nanoseconds: 2_000_000_000)
 
             var statusRequest = URLRequest(url: statusURL)
@@ -338,7 +341,7 @@ struct GapiClient {
                     continue
                 }
                 let result = try JSONDecoder().decode(TranscribeResult.self, from: resultData)
-                return result.toTranscription()
+                return result.toTranscription(applyLocalFixes: applyLocalFixes)
             case "failed", "cancelled":
                 let reason = status.error ?? "Задача распознавания завершилась со статусом \(status.state)"
                 throw GapiError(code: "job_\(status.state)", hint: reason)

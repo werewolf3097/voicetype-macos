@@ -147,7 +147,7 @@ struct DashboardMeetingsView: View {
                 }
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color.clear)
     }
 
     private func meetingRow(_ meeting: MeetingRecord) -> some View {
@@ -203,6 +203,10 @@ struct DashboardMeetingsView: View {
             Circle()
                 .fill(Color.red)
                 .frame(width: 8, height: 8)
+        case .queued:
+            Image(systemName: "clock.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
         case .transcribing, .summarizing:
             ProgressView()
                 .controlSize(.mini)
@@ -240,9 +244,9 @@ struct DashboardMeetingsView: View {
                 .foregroundStyle(Color.accentColor)
 
             VStack(spacing: 6) {
-                Text("Заметки и рекапы встреч (Granola)")
+                Text("Заметки и рекапы встреч")
                     .font(.title2.weight(.semibold))
-                Text("Записывайте звонки без ботов в Zoom/Meet/Telegram. Пишите короткие тезисы во время разговора, а VoiceType разложит речь по спикерам («Вы» и «Собеседник») и соберёт локальный Markdown-рекап.")
+                Text("Записывайте звонки без ботов в Zoom/Meet/Telegram. Пишите короткие тезисы во время разговора, а VoiceType разложит речь по спикерам («Вы» и «Собеседники») и соберёт Markdown-рекап.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -283,10 +287,33 @@ struct DashboardMeetingsView: View {
             .buttonStyle(.borderedProminent)
             .tint(.red)
 
+            if settings.meetingAudioSource == .micAndSystem && !appState.screenCaptureAuthorized {
+                systemAudioPermissionWarning
+                    .frame(maxWidth: 560)
+            }
+
             Spacer()
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var systemAudioPermissionWarning: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Доступ к записи системного звука не активен (пишется только микрофон). После пересборки переключите тумблер VoiceType в Настройках системы → Запись экрана и системного аудио.")
+                .font(.caption)
+            Spacer()
+            Button("Открыть настройки") {
+                PermissionsHelper.openScreenCaptureSettings()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Live Meeting Notepad (Granola Mode)
@@ -329,6 +356,10 @@ struct DashboardMeetingsView: View {
                     Label("Завершить и создать рекап", systemImage: "sparkles")
                 }
                 .buttonStyle(.borderedProminent)
+            }
+
+            if meeting.audioSource == .micAndSystem && (!appState.screenCaptureAuthorized || (appState.meetingElapsedSeconds >= 2 && !appState.activeMeetingSystemAudioCapturing)) {
+                systemAudioPermissionWarning
             }
 
             // Title & Template row
@@ -393,8 +424,8 @@ struct DashboardMeetingsView: View {
     private func completedMeetingView(_ meeting: MeetingRecord) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             // Title & actions header
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 12) {
                     TextField(
                         "Название встречи",
                         text: Binding(
@@ -406,88 +437,109 @@ struct DashboardMeetingsView: View {
                     )
                     .font(.title2.weight(.semibold))
                     .textFieldStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    HStack(spacing: 10) {
-                        Label(Self.fullDateFormatter.string(from: meeting.date), systemImage: "calendar")
-                        Label("\(max(1, Int((meeting.durationSeconds / 60).rounded()))) мин", systemImage: "clock")
-                        Label(
-                            meeting.stereoParties ? "Стерео: Вы + Собеседник" : "Диаризация спикеров",
-                            systemImage: meeting.stereoParties ? "person.2.wave.2" : "waveform"
-                        )
-                        if let lang = meeting.languageSummary {
-                            Text(lang)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.accentColor.opacity(0.12))
-                                .clipShape(Capsule())
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    Picker(
-                        "",
-                        selection: Binding(
-                            get: { meeting.template },
-                            set: { newTpl in
-                                meetingsStore.update(meeting.id) { $0.template = newTpl }
-                                Task {
-                                    await appState.regenerateRecap(for: meeting.id)
+                    HStack(spacing: 6) {
+                        Picker(
+                            "",
+                            selection: Binding(
+                                get: { meeting.template },
+                                set: { newTpl in
+                                    meetingsStore.update(meeting.id) { $0.template = newTpl }
+                                    Task {
+                                        await appState.regenerateRecap(for: meeting.id)
+                                    }
                                 }
+                            )
+                        ) {
+                            ForEach(MeetingTemplate.allCases) { tpl in
+                                Text(tpl.rawValue).tag(tpl)
                             }
-                        )
-                    ) {
-                        ForEach(MeetingTemplate.allCases) { tpl in
-                            Text(tpl.rawValue).tag(tpl)
                         }
-                    }
-                    .labelsHidden()
-                    .frame(width: 175)
-                    .help("Сменить шаблон и пересобрать рекап")
+                        .labelsHidden()
+                        .frame(width: 155)
+                        .help("Сменить шаблон и пересобрать рекап")
 
-                    Button {
-                        TextInjector.copyToClipboard(meetingsStore.fullExportMarkdown(for: meeting))
-                        copiedFeedback = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-                            copiedFeedback = false
-                        }
-                    } label: {
-                        Label(copiedFeedback ? "Скопировано" : "Скопировать .md", systemImage: copiedFeedback ? "checkmark" : "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        meetingsStore.revealMarkdownInFinder(meeting)
-                    } label: {
-                        Image(systemName: "folder")
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Показать файл recap.md в Finder")
-
-                    if meetingsStore.audioFileURL(for: meeting) != nil {
                         Button {
-                            meetingsStore.revealAudioInFinder(meeting)
+                            TextInjector.copyToClipboard(meetingsStore.fullExportMarkdown(for: meeting))
+                            copiedFeedback = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                                copiedFeedback = false
+                            }
                         } label: {
-                            Image(systemName: "waveform.circle")
+                            Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
                         }
                         .buttonStyle(.bordered)
-                        .help("Показать сохранённую аудиозапись в Finder")
-                    }
+                        .help("Скопировать .md в буфер обмена")
 
-                    Button(role: .destructive) {
-                        let idToDelete = meeting.id
-                        meetingsStore.delete(idToDelete)
-                        selectedMeetingID = meetingsStore.meetings.first?.id
-                    } label: {
-                        Image(systemName: "trash")
+                        if meeting.status == .ready, meetingsStore.obsidianExportFileURL(for: meeting) != nil {
+                            Button {
+                                meetingsStore.revealInObsidianFolder(meeting)
+                            } label: {
+                                Image(systemName: "book.closed")
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Показать выгруженный файл в папке Obsidian «Рекапы встреч»")
+                        }
+
+                        Button {
+                            meetingsStore.revealMarkdownInFinder(meeting)
+                        } label: {
+                            Image(systemName: "folder")
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Показать файл recap.md в Finder")
+
+                        if meetingsStore.audioFileURL(for: meeting) != nil {
+                            Button {
+                                meetingsStore.revealAudioInFinder(meeting)
+                            } label: {
+                                Image(systemName: "waveform.circle")
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Показать сохранённую аудиозапись в Finder")
+                        }
+
+                        Button(role: .destructive) {
+                            let idToDelete = meeting.id
+                            appState.deleteMeeting(idToDelete)
+                            selectedMeetingID = meetingsStore.meetings.first?.id
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Удалить встречу")
                     }
-                    .buttonStyle(.bordered)
-                    .help("Удалить встречу")
                 }
+
+                HStack(spacing: 12) {
+                    Label(Self.fullDateFormatter.string(from: meeting.date), systemImage: "calendar")
+                    Label("\(max(1, Int((meeting.durationSeconds / 60).rounded()))) мин", systemImage: "clock")
+                    Label(
+                        meeting.stereoParties
+                            ? "Стерео: Вы + Собеседники"
+                            : (meeting.sysAudioFileName == nil ? "Только микрофон" : "Диаризация спикеров"),
+                        systemImage: meeting.stereoParties ? "person.2.wave.2" : "mic"
+                    )
+                    if let engine = meeting.transcriptionEngine, !engine.isEmpty {
+                        Text(engine)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.14))
+                            .clipShape(Capsule())
+                    }
+                    if let lang = meeting.languageSummary {
+                        Text(lang)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
 
             // Processing / Error banner if applicable
@@ -542,17 +594,48 @@ struct DashboardMeetingsView: View {
     @ViewBuilder
     private func statusBanner(for meeting: MeetingRecord) -> some View {
         switch meeting.status {
+        case .queued(let msg):
+            HStack(spacing: 10) {
+                Image(systemName: "clock.badge.exclamationmark")
+                    .foregroundStyle(.orange)
+                Text(msg)
+                    .font(.callout)
+                Spacer()
+                Button("Проверить farrukh-pc") {
+                    appState.retryMeetingOnWindows(meeting.id)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Срочно сейчас (gapi.uz)") {
+                    appState.transcribeMeetingUrgentGapi(meeting.id)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+            .padding(10)
+            .background(Color.orange.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
         case .transcribing:
+            let engineName = meeting.transcriptionEngine ?? "farrukh-pc"
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
                 if let prog = meeting.progressSeconds, prog > 0 {
-                    Text("Распознавание речи в gapi.uz: обработано \(Int(prog.rounded())) сек…")
+                    Text("Распознавание (\(engineName)): обработано \(Int(prog.rounded())) сек…")
                         .font(.callout)
                 } else {
-                    Text("Загрузка и распознавание аудио встречи в gapi.uz…")
+                    Text("Распознавание аудио встречи (\(engineName))…")
                         .font(.callout)
                 }
                 Spacer()
+                if engineName != "gapi.uz", meetingsStore.audioFileURL(for: meeting) != nil {
+                    Button("Переключить на gapi.uz") {
+                        appState.transcribeMeetingUrgentGapi(meeting.id)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
             .padding(10)
             .background(Color.accentColor.opacity(0.1))
@@ -576,6 +659,19 @@ struct DashboardMeetingsView: View {
                 Text(msg)
                     .font(.callout)
                 Spacer()
+                if meetingsStore.audioFileURL(for: meeting) != nil {
+                    Button("На farrukh-pc") {
+                        appState.retryMeetingOnWindows(meeting.id)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button("Срочно (gapi.uz)") {
+                        appState.transcribeMeetingUrgentGapi(meeting.id)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
                 Button("Собрать рекап из заметок") {
                     Task {
                         await appState.regenerateRecap(for: meeting.id)
@@ -826,7 +922,7 @@ struct DashboardMeetingsView: View {
                                     .fill(speakerColor(for: spk))
                                     .frame(width: 7, height: 7)
                                 TextField(
-                                    meeting.stereoParties ? (spk == 0 ? "Вы" : "Собеседник") : "Спикер \(spk + 1)",
+                                    meeting.stereoParties ? (spk == 0 ? "Вы" : "Собеседники") : "Спикер \(spk + 1)",
                                     text: Binding(
                                         get: { meeting.displayName(for: spk) },
                                         set: { newName in

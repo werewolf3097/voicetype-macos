@@ -81,12 +81,21 @@ enum RussianTransliterator {
         "yesho": "ещё",
         "eshe": "ещё",
         "yeshe": "ещё",
+        "eshcho": "ещё",
+        "eshchyo": "ещё",
+        "yeshcho": "ещё",
         "uje": "уже",
         "ewyo": "ещё",
         "idea": "идея",
         "ideya": "идея",
         "googla": "гугла",
         "google": "гугл",
+        "epam": "EPAM",
+        "epaum": "EPAM",
+        "epem": "EPAM",
+        "brander": "Brander",
+        "brender": "Brander",
+        "bi": "бы",
     ]
 
     /// Restores Cyrillic for a `GapiTranscription` based on `language_detection` results.
@@ -193,12 +202,12 @@ enum RussianTransliterator {
 
     static func convertSentence(_ text: String) -> String {
         let ns = text as NSString
-        guard let regex = try? NSRegularExpression(pattern: "[A-Za-z\u{02BB}\u{2018}'-]+") else {
+        guard let regex = try? NSRegularExpression(pattern: "[A-Za-z\u{02BB}\u{02BC}\u{2018}\u{2019}\u{201B}\u{00B4}'`-]+") else {
             return text
         }
 
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
-        guard !matches.isEmpty else { return text }
+        guard !matches.isEmpty else { return applyRussianPunctuationAndCleanup(text) }
 
         // First pass: transliterate each word token
         var convertedWords: [String] = []
@@ -214,7 +223,7 @@ enum RussianTransliterator {
         let infinitiveTriggers: Set<String> = [
             "чтобы", "надо", "нужно", "можно", "нельзя", "хочу", "хотим", "хотел", "хотела",
             "буду", "будем", "будет", "будут", "могу", "может", "могут", "должен", "должна",
-            "должны", "требуется", "стоит", "пора", "прошу", "попробуй", "попробую", "давай", "давайте"
+            "должны", "требуется", "стоит", "пора", "прошу", "попробуй", "попробую", "давай", "давайте", "бы"
         ]
         var seenTriggerInClause = false
         for i in 0..<convertedWords.count {
@@ -266,6 +275,25 @@ enum RussianTransliterator {
     static func applyRussianPunctuationAndCleanup(_ input: String) -> String {
         var s = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return input }
+
+        let repairs: [(String, String)] = [
+            (#"(?i)\bдобрый ден\b"#, "добрый день"),
+            (#"(?i)\bдоброго ден\b"#, "доброго дня"),
+            (#"(?i)\b(прошу|просим)\s+в[ий]дат[ь]?\b"#, "$1 выдать"),
+            (#"(?i)\b(прошу|просим)\s+выдат\b"#, "$1 выдать"),
+            (#"(?i)\bвйдат[ь]?\b"#, "выдать"),
+            (#"(?i)\b(?:э|е|и)\s*пау?м\b"#, "EPAM"),
+            (#"(?i)\bследуюшие\b"#, "следующие"),
+            (#"(?i)\bследуюший\b"#, "следующий"),
+            (#"(?i)\bв течении\s+(получаса|часа|часов|минуты|минут|дня|дней|недели|недель|месяца|года)\b"#, "в течение $1"),
+            (#"(?i)\bкоторе\s+(были|сделаны|созданы|запущены|будут|стали)\b"#, "которые $1"),
+            (#"(?i)\bпоследни[йяе]\s+несколько\b"#, "последние несколько"),
+            (#"(?i)\bэщо\b"#, "ещё"),
+        ]
+        for (pattern, replacement) in repairs {
+            guard let rx = try? NSRegularExpression(pattern: pattern) else { continue }
+            s = rx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: replacement)
+        }
 
         // 1. Remove pure vocal hesitation sounds ("э-э", "ээ", "эм", "м-м", "мм", "хм")
         if let fillerRegex = try? NSRegularExpression(
@@ -433,6 +461,55 @@ enum RussianTransliterator {
             s = s.replacingOccurrences(of: "  ", with: " ")
         }
 
+        if let vocativeRx = try? NSRegularExpression(
+            pattern: #"(?i)^(коллеги|друзья|ребята)\b(?!,)"#
+        ) {
+            s = vocativeRx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "$1,")
+        }
+        if let greetingRx = try? NSRegularExpression(
+            pattern: #"(?i)\b(добрый день|добрый вечер|доброе утро)\b(?=\s+[а-яё])"#
+        ) {
+            s = greetingRx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "$1,")
+        }
+        if let helloRx = try? NSRegularExpression(pattern: "(?i)^приветствую\\s+([а-яё])") {
+            let ns = s as NSString
+            if let match = helloRx.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) {
+                let letter = ns.substring(with: match.range(at: 1)).uppercased()
+                let mutable = NSMutableString(string: s)
+                mutable.replaceCharacters(in: match.range, with: "Приветствую. \(letter)")
+                s = mutable as String
+            }
+        }
+
+        // «по тому что делает Brander», не союз «потому что». Запятая перед этим «что» не нужна.
+        if let poTomuRx = try? NSRegularExpression(
+            pattern: #"(?i)\bпо\s*тому\s*,?\s*что\s+делает\s+((?-i:[A-ZА-ЯЁ][A-Za-zА-Яа-яЁё]*))"#
+        ) {
+            s = poTomuRx.stringByReplacingMatches(
+                in: s,
+                range: NSRange(s.startIndex..., in: s),
+                withTemplate: "по тому что делает $1"
+            )
+        }
+
+        // «для нас, сейчас я…»: «сейчас» начинает следующее действие.
+        if let seychasRx = try? NSRegularExpression(
+            pattern: #"(?i)\b([а-яё]{2,})\s+сейчас\s+(я|мы|ты|вы|он|она|они)\b"#
+        ) {
+            let sameClause: Set<String> = [
+                "и", "а", "но", "или", "что", "как", "уже", "вот", "ну", "только",
+                "просто", "именно", "тогда", "если", "когда", "чтобы", "тоже"
+            ]
+            let ns = NSMutableString(string: s)
+            for m in seychasRx.matches(in: s, range: NSRange(s.startIndex..., in: s)).reversed() {
+                let prev = ns.substring(with: m.range(at: 1))
+                guard !sameClause.contains(prev.lowercased()) else { continue }
+                let pronoun = ns.substring(with: m.range(at: 2))
+                ns.replaceCharacters(in: m.range, with: "\(prev), сейчас \(pronoun)")
+            }
+            s = ns as String
+        }
+
         // Ensure first character is capitalized and sentence ends with punctuation if >= 3 words
         if let first = s.first, first.isLowercase {
             s = String(first).uppercased() + s.dropFirst()
@@ -444,8 +521,20 @@ enum RussianTransliterator {
         return s
     }
 
+    private static let modifierApostrophes = CharacterSet(charactersIn: "'\u{02BB}\u{02BC}\u{2018}\u{2019}\u{201B}\u{00B4}`")
+
+    /// gapi writes Uzbek modifier apostrophes inside Russian words (`dat'`, `rabotat'`).
+    /// They are not letters. Strip them before the Cyrillic map so they cannot survive as `дать'`.
+    private static func stripModifierApostrophes(_ word: String) -> String {
+        word.unicodeScalars.reduce(into: "") { partial, scalar in
+            if !modifierApostrophes.contains(scalar) {
+                partial.unicodeScalars.append(scalar)
+            }
+        }
+    }
+
     private static func transliterateWord(_ rawWord: String) -> String {
-        let lower = rawWord.lowercased()
+        let lower = stripModifierApostrophes(rawWord).lowercased()
         if let exact = exactWordOverrides[lower] {
             return exact
         }
@@ -473,7 +562,7 @@ enum RussianTransliterator {
             ("ye", "е"),
             ("yo", "ё"),
             ("zh", "ж"),
-            ("ts", "ц"),
+            ("kh", "х"),
             ("dj", "дж"),
             ("sj", "сж"),
             ("sc", "сц"),
@@ -481,6 +570,9 @@ enum RussianTransliterator {
         for (from, to) in replacements {
             s = s.replacingOccurrences(of: from, with: to)
         }
+        // `ts` is ц only before a vowel (`otsenit` → оцен). Before a consonant it is т+с
+        // (`privetstvuyu` → приветствую, not привецтвую).
+        s = replaceTsAffricate(s)
 
         var out = ""
         let chars = Array(s)
@@ -498,8 +590,19 @@ enum RussianTransliterator {
             case "z": out.append("з")
             case "i": out.append("и")
             case "y":
-                let prevIsVowel = i > 0 && "aeiouаеэиоуыюя".contains(chars[i - 1])
-                if i == chars.count - 1 && !prevIsVowel {
+                // Uzbek Latin has no ы. Between two consonants `y` is that vowel (`vydat` → выдат),
+                // not the glide й (`вйдат`).
+                let latinVowels: Set<Character> = ["a", "e", "i", "o", "u"]
+                let prev = i > 0 ? chars[i - 1] : nil
+                let next = i + 1 < chars.count ? chars[i + 1] : nil
+                let prevIsVowel = prev.map { latinVowels.contains($0) } ?? false
+                let prevIsConsonant = prev.map { !latinVowels.contains($0) && $0 != "y" } ?? false
+                let nextIsConsonant = next.map { !latinVowels.contains($0) && $0 != "y" } ?? false
+                if prevIsConsonant && nextIsConsonant {
+                    out.append("ы")
+                } else if i == chars.count - 1 && prev == "n" {
+                    out.append("ый")
+                } else if i == chars.count - 1 && !prevIsVowel {
                     out.append("и")
                 } else {
                     out.append("й")
@@ -523,27 +626,22 @@ enum RussianTransliterator {
         }
 
         if isValidRussian(out) {
-            return out
+            return capitalizeProperName(out)
         }
 
-        // Generate targeted candidates for letters missing in Uzbek Latin (`ь` and `ы`)
+        if let guess = preferredSpellGuess(for: out) {
+            return guess
+        }
+
+        // ь is missing from Uzbek Latin. Do not swap ы→и, and do not invent ы
+        // just because some other word with ы happens to be in the dictionary.
         var candidates: [String] = []
         candidates.append(out + "ь")
-        if out.hasSuffix("и") {
-            candidates.append(String(out.dropLast()) + "ы")
-        }
         if out.hasSuffix("еа") {
             candidates.append(String(out.dropLast(2)) + "ея")
         }
 
         let outChars = Array(out)
-        for i in 0..<outChars.count where outChars[i] == "и" {
-            var mod = outChars
-            mod[i] = "ы"
-            let cand = String(mod)
-            candidates.append(cand)
-            candidates.append(cand + "ь")
-        }
         for i in 0..<(outChars.count - 1) {
             if "лнртсздбвпм".contains(outChars[i]) {
                 var mod = outChars
@@ -555,11 +653,220 @@ enum RussianTransliterator {
 
         for cand in candidates {
             if isValidRussian(cand) {
-                return cand
+                return capitalizeProperName(cand)
             }
         }
 
-        return out
+        if let guess = safeSpellGuess(for: out) {
+            return guess
+        }
+
+        return capitalizeProperName(out)
+    }
+
+    /// `ts` → ц when it is the affricate, not the cluster тс.
+    private static func replaceTsAffricate(_ word: String) -> String {
+        var result = ""
+        let chars = Array(word)
+        let vowels: Set<Character> = ["a", "e", "i", "o", "u", "y"]
+        var i = 0
+        while i < chars.count {
+            if chars[i] == "t", i + 1 < chars.count, chars[i + 1] == "s" {
+                let next = i + 2 < chars.count ? chars[i + 2] : nil
+                if next == nil || vowels.contains(next!) {
+                    result.append("ц")
+                    i += 2
+                    continue
+                }
+            }
+            result.append(chars[i])
+            i += 1
+        }
+        return result
+    }
+
+    /// A dictionary guess that only restores capitalization, ы (never ы→и), ь, щ or э.
+    private static func preferredSpellGuess(for word: String) -> String? {
+        let guesses = spellGuesses(for: word)
+        if let first = guesses.first, isGentleRepair(from: word, to: first), isValidRussian(first) {
+            return first
+        }
+        // Later guesses are only taken for a capitalized name (`сабини` → `Сабины`).
+        // A lowercase ы-variant (`личке` → `лычке`) is a different word.
+        for guess in guesses where guess.first?.isUppercase == true && isGentleRepair(from: word, to: guess) && isValidRussian(guess) {
+            return guess
+        }
+        // Uzbek Latin writes ы as i. A high-ranked single swap restores it (`сделани` → `сделаны`).
+        // Guess 15 of `личке` is `лычке` and is left alone.
+        for guess in guesses.prefix(4) where isSingleYRestoration(from: word, to: guess) && isValidRussian(guess) {
+            return guess
+        }
+        return nil
+    }
+
+    /// Exactly one и→ы and no other change.
+    private static func isSingleYRestoration(from source: String, to guess: String) -> Bool {
+        let a = Array(source)
+        let b = Array(guess)
+        guard a.count == b.count, !a.isEmpty else { return false }
+        var swaps = 0
+        for i in 0..<a.count {
+            if a[i] == b[i] { continue }
+            if a[i] == "и" && b[i] == "ы" {
+                swaps += 1
+            } else {
+                return false
+            }
+        }
+        return swaps == 1
+    }
+
+    private static func isGentleRepair(from source: String, to guess: String) -> Bool {
+        let a = Array(source)
+        let b = Array(guess)
+        var i = 0
+        var j = 0
+        var changes = 0
+        while i < a.count && j < b.count {
+            if a[i] == b[j] {
+                i += 1
+                j += 1
+            } else if String(a[i]).lowercased() == String(b[j]).lowercased() {
+                changes += 1
+                i += 1
+                j += 1
+            } else if b[j] == "ь" {
+                changes += 1
+                j += 1
+            } else if a[i] == "и" && b[j] == "ы" {
+                changes += 1
+                i += 1
+                j += 1
+            } else if a[i] == "ш" && b[j] == "щ" {
+                changes += 1
+                i += 1
+                j += 1
+            } else if (a[i] == "е" && b[j] == "э") || (a[i] == "э" && b[j] == "е") {
+                changes += 1
+                i += 1
+                j += 1
+            } else {
+                return false
+            }
+        }
+        while j < b.count && b[j] == "ь" {
+            changes += 1
+            j += 1
+        }
+        return changes > 0 && i == a.count && j == b.count
+    }
+
+    /// Capitalize a word the Russian dictionary knows as a name, including an inflected form
+    /// whose dictionary entry is only the nominative (`китову` → `Китову`).
+    private static func capitalizeProperName(_ word: String) -> String {
+        guard let first = word.first, first.isLowercase else { return word }
+        let titled = String(first).uppercased() + word.dropFirst()
+        if !isValidRussian(word), isValidRussian(titled) {
+            return titled
+        }
+        if isValidRussian(titled), looksLikeStoredName(word) {
+            return titled
+        }
+        guard !isValidRussian(word) else { return word }
+        let endings = ["ому", "ему", "ого", "его", "ами", "ями", "ах", "ях", "ой", "ей", "ом", "ем", "ов", "ев", "ых", "их", "у", "ю", "а", "я", "е", "ы", "и", "о"]
+        for ending in endings where word.hasSuffix(ending) && word.count - ending.count >= 4 {
+            let stem = String(word.dropLast(ending.count))
+            if isValidRussian(titleCase(stem)), looksLikeStoredName(stem) {
+                return titled
+            }
+        }
+        return word
+    }
+
+    private static func looksLikeStoredName(_ word: String) -> Bool {
+        let titled = titleCase(word)
+        guard isValidRussian(titled) else { return false }
+        guard let top = spellGuesses(for: word).first, top.first?.isUppercase == true else { return false }
+        let suggestion = top.lowercased()
+        let source = word.lowercased()
+        // «тому» → «Тому» is the same word. A surname shows up as a different name («китов» → «Киров»).
+        if suggestion == source { return false }
+        let prefix = source.prefix(min(4, max(source.count - 1, 1)))
+        return !suggestion.hasPrefix(prefix)
+    }
+
+    private static func titleCase(_ word: String) -> String {
+        guard let first = word.first else { return word }
+        return String(first).uppercased() + word.dropFirst()
+    }
+
+    private static func spellGuesses(for word: String) -> [String] {
+        let ns = word as NSString
+        return NSSpellChecker.shared.guesses(
+            forWordRange: NSRange(location: 0, length: ns.length),
+            in: word,
+            language: "ru",
+            inSpellDocumentWithTag: 0
+        ) ?? []
+    }
+
+    /// Accept a later spellchecker guess only for ь, ш/щ, е/э or case.
+    /// An и→ы swap belongs in `preferredSpellGuess`: the first close guess (`результаты`)
+    /// or a capitalized name (`Сабины`). A late lowercase swap turns `личке` into `лычке`.
+    private static func safeSpellGuess(for word: String) -> String? {
+        let ns = word as NSString
+        let guesses = NSSpellChecker.shared.guesses(
+            forWordRange: NSRange(location: 0, length: ns.length),
+            in: word,
+            language: "ru",
+            inSpellDocumentWithTag: 0
+        ) ?? []
+        for guess in guesses where isNarrowCyrillicEdit(from: word, to: guess) && isValidRussian(guess) {
+            return guess
+        }
+        return nil
+    }
+
+    private static func isNarrowCyrillicEdit(from source: String, to guess: String) -> Bool {
+        let a = Array(source)
+        let b = Array(guess)
+        if a.count == b.count {
+            var diffs = 0
+            for i in 0..<a.count where a[i] != b[i] {
+                diffs += 1
+                if diffs > 1 { return false }
+                let sourceChar = a[i]
+                let guessChar = b[i]
+                let allowed = (sourceChar == "ш" && guessChar == "щ")
+                    || (sourceChar == "е" && guessChar == "э")
+                    || (sourceChar == "э" && guessChar == "е")
+                    || String(sourceChar).lowercased() == String(guessChar).lowercased()
+                if !allowed {
+                    return false
+                }
+            }
+            return diffs == 1
+        }
+        guard b.count == a.count + 1 else { return false }
+        var i = 0
+        var j = 0
+        var inserted = false
+        while i < a.count && j < b.count {
+            if a[i] == b[j] {
+                i += 1
+                j += 1
+            } else if b[j] == "ь" && !inserted {
+                inserted = true
+                j += 1
+            } else {
+                return false
+            }
+        }
+        if j < b.count && b[j] == "ь" && !inserted {
+            inserted = true
+            j += 1
+        }
+        return inserted && i == a.count && j == b.count
     }
 
     private static func isValidRussian(_ word: String) -> Bool {

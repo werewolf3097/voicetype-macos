@@ -32,6 +32,7 @@
 		E10E3BFA041144533C5A0B7F /* DashboardSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF33DDA564FA46E653A6F103 /* DashboardSettingsView.swift */; };
 		E97AD2359099DDAF2F15DD9C /* DashboardHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C69AFF8A2BDE3F922F021D4 /* DashboardHomeView.swift */; };
 		EA4116739D8F68D3BD6B8FAA /* PermissionsHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F5A8542089BAFAF0481165 /* PermissionsHelper.swift */; };
+		EF617543F6627700E0D586DE /* WhisperWindowsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8455EAEE007AA71EE994CD /* WhisperWindowsClient.swift */; };
 		F65B73F4EF8D7B34D5F5BFCE /* GapiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63D80FD81608ABCB7ECF1189 /* GapiClient.swift */; };
 		F868D42E9C01B521CC04C44E /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D7C9B125AD39E9D080C12A /* HistoryStore.swift */; };
 		FC6992DB9BB733A822085D3E /* RussianTransliterator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B99D35A61420C8F6909FD9E2 /* RussianTransliterator.swift */; };
@@ -66,6 +67,7 @@
 		DF084FBC0A7AED8A73AC04AB /* RecordingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingIndicatorController.swift; sourceTree = "<group>"; };
 		F8254E25852DB8ED4DF25042 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		F951730C87188297E4F9270C /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		FA8455EAEE007AA71EE994CD /* WhisperWindowsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperWindowsClient.swift; sourceTree = "<group>"; };
 		FDF5C060AAEFC6E9B4EF67A5 /* RecordingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingIndicatorView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -109,6 +111,7 @@
 				94E90680F395346C87F5BA5E /* TextInjector.swift */,
 				2762FB627A74AD05CC115BA2 /* UzbekDialectConverter.swift */,
 				8DA4F1C6F8F0BE0AE040AF96 /* VoiceTypeApp.swift */,
+				FA8455EAEE007AA71EE994CD /* WhisperWindowsClient.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -215,6 +218,7 @@
 				0B146B2A0F90C204C0E7748B /* TextInjector.swift in Sources */,
 				AFED708539D2A3D573978EBB /* UzbekDialectConverter.swift in Sources */,
 				D5DF592090940957E46BAD99 /* VoiceTypeApp.swift in Sources */,
+				EF617543F6627700E0D586DE /* WhisperWindowsClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

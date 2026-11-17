@@ -109,6 +109,15 @@ enum UzbekDialectConverter {
         let trimmed = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return transcription }
 
+        let ruShare = transcription.languageShare?["ru"] ?? 0
+        let uzShare = (transcription.languageShare?["uz"] ?? 0) + (transcription.languageShare?["uz-khorezm"] ?? 0)
+        let hasUzbekSegment = transcription.segments.contains {
+            $0.languageCode == "uz" || $0.languageCode == "uz-khorezm"
+        }
+        let russianOnly = (transcription.languageCode == "ru" || (transcription.languageCode == nil && ruShare >= 0.5 && uzShare < 0.15))
+            && !hasUzbekSegment
+        if russianOnly { return transcription }
+
         let updatedSegments = transcription.segments.map { seg -> GapiTranscription.Segment in
             let isUzSeg = (seg.languageCode == nil || seg.languageCode == "uz" || seg.languageCode == "uz-khorezm")
             guard isUzSeg else { return seg }

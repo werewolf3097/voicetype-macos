@@ -1,0 +1,207 @@
+<mxfile host="app.diagrams.net" modified="2026-11-16T15:06:00.000Z" agent="Antigravity" version="24.7.17" type="device">
+  <diagram id="voicetype-meetings" name="VoiceType Meetings Pipeline">
+    <mxGraphModel dx="1950" dy="1050" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title_banner" value="VoiceType Meetings — конвейер записи, расшифровки и экспорта (0% AI-нагрузки в звонке)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e293b;strokeColor=#0f172a;fontColor=#f8fafc;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1790" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- Zone 1: Mac (x=40..410) -->
+        <mxCell id="zone_mac" value="1. Mac — VoiceType.app (0% AI-нагрузки)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#3b82f6;strokeWidth=2;verticalAlign=top;fontSize=14;fontStyle=1;fontColor=#1e3a8a;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="370" height="710" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mac_mic" value="&lt;b&gt;AVAudioRecorder (Микрофон)&lt;/b&gt;&lt;br&gt;Запись напрямую в &lt;code&gt;mic.wav&lt;/code&gt;&lt;br&gt;16 kHz · 16-bit PCM mono · Канал [Вы]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#60a5fa;strokeWidth=1.5;fontSize=12;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="75" y="142" width="305" height="74" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mac_sys" value="&lt;b&gt;ScreenCaptureKit (Системный звук)&lt;/b&gt;&lt;br&gt;Запись в &lt;code&gt;sys.wav&lt;/code&gt; + выравнивание пауз по &lt;code&gt;PTS&lt;/code&gt;&lt;br&gt;16 kHz · 16-bit PCM mono · Канал [Собеседники]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#60a5fa;strokeWidth=1.5;fontSize=12;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="75" y="238" width="305" height="82" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mac_queue" value="&lt;b&gt;Локальная папка встречи и очередь&lt;/b&gt;&lt;br&gt;&lt;code&gt;~/Library/Application Support/VoiceType/meetings/&amp;lt;UUID&amp;gt;/&lt;/code&gt;&lt;br&gt;Хранит &lt;code&gt;mic.wav&lt;/code&gt;, &lt;code&gt;sys.wav&lt;/code&gt;, &lt;code&gt;meetings.json&lt;/code&gt;&lt;br&gt;Автовосстановление при рестарте и защита от потерь" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=1.5;fontSize=12;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="75" y="346" width="305" height="114" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mac_vad" value="&lt;b&gt;Локальный RMS VAD и нарезка&lt;/b&gt;&lt;br&gt;Вырезает паузы тишины (&amp;gt; 2 с) → ноль галлюцинаций&lt;br&gt;Режет речь на срезы до 75 с для &lt;code&gt;farrukh-pc&lt;/code&gt;&lt;br&gt;Удаляет WAV только после успеха (если &lt;code&gt;keepAudio=off&lt;/code&gt;)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#60a5fa;strokeWidth=1.5;fontSize=12;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="75" y="492" width="305" height="106" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mac_notes" value="&lt;b&gt;Живой блокнот встречи&lt;/b&gt;&lt;br&gt;Ваши тезисы (&lt;code&gt;rawNotes&lt;/code&gt;) + шаблон встречи&lt;br&gt;(скелет важности для рекапа)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fefce8;strokeColor=#ca8a04;strokeWidth=1.5;fontSize=12;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="75" y="636" width="305" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Zone 2: Routing & Resilience (x=480..930) -->
+        <mxCell id="zone_router" value="2. Маршрутизация и отказоустойчивость (AppState)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;strokeWidth=2;verticalAlign=top;fontSize=14;fontStyle=1;fontColor=#1e293b;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="480" y="90" width="450" height="710" as="geometry" />
+        </mxCell>
+
+        <mxCell id="router_check" value="&lt;b&gt;Проверка доступности farrukh-pc&lt;/b&gt;&lt;br&gt;&lt;code&gt;GET http://100.98.178.46:8178/&lt;/code&gt;&lt;br&gt;(Tailscale, таймаут 2.5 с)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#475569;strokeWidth=1.5;fontSize=12;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="550" y="142" width="300" height="76" as="geometry" />
+        </mxCell>
+
+        <mxCell id="route_main" value="&lt;b&gt;Основной путь (Windows онлайн)&lt;/b&gt;&lt;br&gt;Раздельная отправка срезов:&lt;br&gt;• &lt;code&gt;mic.wav&lt;/code&gt; (speaker=0 «Вы»)&lt;br&gt;• &lt;code&gt;sys.wav&lt;/code&gt; (speaker=1 «Собеседники»)&lt;br&gt;+ &lt;code&gt;initial_prompt&lt;/code&gt; (Korzinka, Yango, SuperApp, SAP…)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;strokeWidth=1.5;fontSize=12;fontColor=#052e16;" vertex="1" parent="1">
+          <mxGeometry x="540" y="256" width="320" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="route_wait" value="&lt;b&gt;Режим «Ждун» (ПК офлайн / обрыв)&lt;/b&gt;&lt;br&gt;Статус &lt;code&gt;.queued&lt;/code&gt; — запись лежит на Mac,&lt;br&gt;&lt;code&gt;mic.wav&lt;/code&gt; и &lt;code&gt;sys.wav&lt;/code&gt; не удаляются.&lt;br&gt;Таймер раз в 30 с ждёт возврата ПК в Tailscale." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontSize=12;fontColor=#451a03;" vertex="1" parent="1">
+          <mxGeometry x="540" y="424" width="320" height="122" as="geometry" />
+        </mxCell>
+
+        <mxCell id="route_gapi" value="&lt;b&gt;Фолбэк «Срочно сейчас» (gapi.uz)&lt;/b&gt;&lt;br&gt;Потоковая склейка &lt;code&gt;mic + sys → stereo_gapi.wav&lt;/code&gt;&lt;br&gt;(&amp;lt; 2 МБ RAM) → &lt;code&gt;POST /v1/jobs&lt;/code&gt;&lt;br&gt;&lt;code&gt;stereo_channels_as_speakers: true&lt;/code&gt;&lt;br&gt;+ &lt;code&gt;RussianTransliterator&lt;/code&gt; + &lt;code&gt;UzbekDialectConverter&lt;/code&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;strokeWidth=1.5;fontSize=12;fontColor=#3b0764;" vertex="1" parent="1">
+          <mxGeometry x="540" y="592" width="320" height="148" as="geometry" />
+        </mxCell>
+
+        <!-- Zone 3: Compute Backends (x=1025..1375) -->
+        <mxCell id="zone_compute" value="3. Движки распознавания речи (STT)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#b45309;strokeWidth=2;verticalAlign=top;fontSize=14;fontStyle=1;fontColor=#78350f;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1025" y="90" width="350" height="710" as="geometry" />
+        </mxCell>
+
+        <mxCell id="win_pc" value="&lt;b&gt;Домашний ПК: farrukh-pc&lt;/b&gt;&lt;br&gt;&lt;code&gt;100.98.178.46:8178&lt;/code&gt; (Tailscale)&lt;br&gt;&lt;br&gt;• &lt;code&gt;whisper.cpp server&lt;/code&gt; (&lt;code&gt;ggml-large-v3-turbo&lt;/code&gt;)&lt;br&gt;• 25 потоков Xeon, 64 ГБ ОЗУ, автоперезапуск&lt;br&gt;• Возвращает &lt;code&gt;verbose_json&lt;/code&gt; с таймкодами&lt;br&gt;• На Mac: фильтр галлюцинаций и слияние реплик" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;strokeWidth=1.5;fontSize=12;fontColor=#0c4a6e;" vertex="1" parent="1">
+          <mxGeometry x="1045" y="195" width="310" height="225" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gapi_cloud" value="&lt;b&gt;Резервное облако: console.gapi.uz&lt;/b&gt;&lt;br&gt;Токен в Keychain (&lt;code&gt;com.farrukh.voicetype&lt;/code&gt;)&lt;br&gt;&lt;br&gt;• Асинхронная задача &lt;code&gt;/v1/jobs&lt;/code&gt;&lt;br&gt;• Стерео-разделение на L [Вы] и R [Собеседники]&lt;br&gt;• Отличный узбекский + прогон русского через&lt;br&gt;  &lt;code&gt;RussianTransliterator&lt;/code&gt; (кириллица + словарь)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7f3;strokeColor=#db2777;strokeWidth=1.5;fontSize=12;fontColor=#831843;" vertex="1" parent="1">
+          <mxGeometry x="1045" y="545" width="310" height="205" as="geometry" />
+        </mxCell>
+
+        <!-- Zone 4: Recap & Knowledge Base (x=1495..1830) -->
+        <mxCell id="zone_output" value="4. Рекап, Obsidian и база знаний" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=2;verticalAlign=top;fontSize=14;fontStyle=1;fontColor=#064e3b;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1495" y="90" width="335" height="710" as="geometry" />
+        </mxCell>
+
+        <mxCell id="recap_gen" value="&lt;b&gt;MeetingRecapGenerator&lt;/b&gt;&lt;br&gt;&lt;br&gt;• С ключом Claude: &lt;code&gt;Claude Sonnet&lt;/code&gt;&lt;br&gt;  (заметки + до 1500 реплик + шаблон)&lt;br&gt;• Без ключа / офлайн: &lt;code&gt;LocalRecapBuilder&lt;/code&gt;&lt;br&gt;  (статистика, тезисы, Action Items)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;strokeWidth=1.5;fontSize=12;fontColor=#064e3b;" vertex="1" parent="1">
+          <mxGeometry x="1517" y="160" width="290" height="165" as="geometry" />
+        </mxCell>
+
+        <mxCell id="obsidian" value="&lt;b&gt;Автоэкспорт в Obsidian&lt;/b&gt;&lt;br&gt;&lt;code&gt;pers_docs/Рекапы встреч/&lt;/code&gt;&lt;br&gt;&lt;code&gt;YYYY-MM-DD_HH-mm_&amp;lt;Тема&amp;gt;_vt.md&lt;/code&gt;&lt;br&gt;&lt;br&gt;• YAML frontmatter (&lt;code&gt;source: voicetype&lt;/code&gt;)&lt;br&gt;• Рекап + задачи + полный транскрипт&lt;br&gt;  &lt;code&gt;[ММ:СС] [Вы] / [Собеседники]&lt;/code&gt;&lt;br&gt;• 0 конфликтов с Granola" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#047857;strokeWidth=1.5;fontSize=12;fontColor=#022c22;" vertex="1" parent="1">
+          <mxGeometry x="1517" y="375" width="290" height="190" as="geometry" />
+        </mxCell>
+
+        <mxCell id="hetzner" value="&lt;b&gt;База знаний assistant_memory&lt;/b&gt;&lt;br&gt;Сервер Hetzner (&lt;code&gt;100.79.78.37&lt;/code&gt;)&lt;br&gt;PostgreSQL 18 + &lt;code&gt;pgvector&lt;/code&gt; (&lt;code&gt;bge-m3&lt;/code&gt;)&lt;br&gt;Доступно боту, Claude Code и &lt;code&gt;agy&lt;/code&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4338ca;strokeWidth=1.5;fontSize=12;fontColor=#1e1b4b;" vertex="1" parent="1">
+          <mxGeometry x="1517" y="618" width="290" height="122" as="geometry" />
+        </mxCell>
+
+        <!-- Edges within Zone 1 -->
+        <mxCell id="e_mic_queue" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2563eb;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="mac_mic" target="mac_queue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="57" y="179" />
+              <mxPoint x="57" y="403" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_sys_queue" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2563eb;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="mac_sys" target="mac_queue">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_queue_vad" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2563eb;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="mac_queue" target="mac_vad">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Zone 1 -> Zone 2 -->
+        <mxCell id="e_vad_router" value="Стоп / Очередь" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#334155;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="mac_vad" target="router_check">
+          <mxGeometry x="-0.25" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="445" y="545" />
+              <mxPoint x="445" y="180" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Zone 1 (Notes) -> Zone 4 (Recap) along bottom corridor -->
+        <mxCell id="e_notes_recap" value="Заметки пользователя (rawNotes) + шаблон" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ca8a04;strokeWidth=1.8;dashed=1;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="mac_notes" target="recap_gen">
+          <mxGeometry x="-0.05" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="227" y="840" />
+              <mxPoint x="1852" y="840" />
+              <mxPoint x="1852" y="242" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Edges within Zone 2 -->
+        <mxCell id="e_check_main" value="200 OK" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#16a34a;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="router_check" target="route_main">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_check_wait" value="Недоступен" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="router_check" target="route_wait">
+          <mxGeometry x="0.1" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="895" y="180" />
+              <mxPoint x="895" y="485" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_wait_retry" value="Таймер 30 с" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=1.5;dashed=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="route_wait" target="router_check">
+          <mxGeometry x="-0.05" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="505" y="485" />
+              <mxPoint x="505" y="180" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_wait_gapi" value="Кнопка в UI" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9333ea;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="route_wait" target="route_gapi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Zone 2 -> Zone 3 -->
+        <mxCell id="e_main_win" value="WAV-срезы + prompt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="route_main" target="win_pc">
+          <mxGeometry x="0.2" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="975" y="321" />
+              <mxPoint x="975" y="321" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_gapi_cloud" value="stereo_gapi.wav" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#db2777;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="route_gapi" target="gapi_cloud">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Zone 3 -> Zone 4 -->
+        <mxCell id="e_win_recap" value="Сегменты [Вы]/[Собеседники]" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="win_pc" target="recap_gen">
+          <mxGeometry x="-0.15" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1435" y="210" />
+              <mxPoint x="1435" y="210" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_gapi_recap" value="Кириллица + сегменты" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#db2777;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="gapi_cloud" target="recap_gen">
+          <mxGeometry x="-0.25" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1435" y="647" />
+              <mxPoint x="1435" y="280" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Zone 4 internal -->
+        <mxCell id="e_recap_obsidian" value="Статус .ready" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#047857;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="recap_gen" target="obsidian">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_obsidian_hetzner" value="Импорт из pers_docs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4338ca;strokeWidth=1.8;endArrow=block;endFill=1;fontSize=11;fontStyle=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="obsidian" target="hetzner">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

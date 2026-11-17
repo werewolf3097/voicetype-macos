@@ -46,6 +46,7 @@ struct MeetingActionItem: Identifiable, Codable, Equatable {
 
 enum MeetingStatus: Codable, Equatable {
     case recording
+    case queued(String)
     case transcribing
     case summarizing
     case ready
@@ -60,6 +61,9 @@ enum MeetingStatus: Codable, Equatable {
         let kind = try container.decode(String.self, forKey: .kind)
         switch kind {
         case "recording": self = .recording
+        case "queued":
+            let msg = (try? container.decode(String.self, forKey: .message)) ?? "Ожидает farrukh-pc в Tailscale"
+            self = .queued(msg)
         case "transcribing": self = .transcribing
         case "summarizing": self = .summarizing
         case "ready": self = .ready
@@ -76,6 +80,9 @@ enum MeetingStatus: Codable, Equatable {
         switch self {
         case .recording:
             try container.encode("recording", forKey: .kind)
+        case .queued(let msg):
+            try container.encode("queued", forKey: .kind)
+            try container.encode(msg, forKey: .message)
         case .transcribing:
             try container.encode("transcribing", forKey: .kind)
         case .summarizing:
@@ -106,6 +113,9 @@ struct MeetingRecord: Identifiable, Codable, Equatable {
     var languageSummary: String?
     var gapiSummary: String?
     var audioFileName: String?
+    var sysAudioFileName: String? = nil
+    var transcriptionEngine: String? = nil
+    var obsidianFileName: String? = nil
     var status: MeetingStatus
     var progressSeconds: Double?
 
@@ -114,8 +124,11 @@ struct MeetingRecord: Identifiable, Codable, Equatable {
         if let custom = speakerNames[speaker], !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return custom
         }
+        if speaker == 0 {
+            return "Вы"
+        }
         if stereoParties {
-            return speaker == 0 ? "Вы" : "Собеседник"
+            return "Собеседники"
         }
         return "Спикер \(speaker + 1)"
     }
@@ -162,6 +175,12 @@ final class MeetingsStore: ObservableObject {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    func sysAudioFileURL(for meeting: MeetingRecord) -> URL? {
+        guard let name = meeting.sysAudioFileName else { return nil }
+        let url = folderURL(for: meeting.id).appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     @discardableResult
     func createDraftMeeting(
         title: String = "",
@@ -187,11 +206,14 @@ final class MeetingsStore: ObservableObject {
             recapMarkdown: "",
             actionItems: [],
             segments: [],
-            speakerNames: audioSource == .micAndSystem ? [0: "Вы", 1: "Собеседник"] : [:],
+            speakerNames: audioSource == .micAndSystem ? [0: "Вы", 1: "Собеседники"] : [:],
             languageCode: nil,
             languageSummary: nil,
             gapiSummary: nil,
             audioFileName: nil,
+            sysAudioFileName: nil,
+            transcriptionEngine: nil,
+            obsidianFileName: nil,
             status: .recording,
             progressSeconds: nil
         )
@@ -208,11 +230,14 @@ final class MeetingsStore: ObservableObject {
     func update(_ id: UUID, mutate: (inout MeetingRecord) -> Void) {
         guard let idx = meetings.firstIndex(where: { $0.id == id }) else { return }
         mutate(&meetings[idx])
-        let updated = meetings[idx]
-        save()
+        var updated = meetings[idx]
         if updated.status == .ready || !updated.recapMarkdown.isEmpty {
-            writeMarkdownFile(for: updated)
+            if let exportedName = writeMarkdownFile(for: updated), exportedName != updated.obsidianFileName {
+                meetings[idx].obsidianFileName = exportedName
+                updated = meetings[idx]
+            }
         }
+        save()
     }
 
     func delete(_ id: UUID) {
@@ -223,36 +248,103 @@ final class MeetingsStore: ObservableObject {
     }
 
     func revealMarkdownInFinder(_ meeting: MeetingRecord) {
-        writeMarkdownFile(for: meeting)
+        _ = writeMarkdownFile(for: meeting)
         let url = markdownFileURL(for: meeting.id)
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     func revealAudioInFinder(_ meeting: MeetingRecord) {
-        guard let url = audioFileURL(for: meeting) else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        let urls = [audioFileURL(for: meeting), sysAudioFileURL(for: meeting)].compactMap { $0 }
+        guard !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
-    func writeMarkdownFile(for meeting: MeetingRecord) {
+    func obsidianExportFileURL(for meeting: MeetingRecord) -> URL? {
+        guard let folder = resolvedObsidianFolderURL() else { return nil }
+        let fileName = meeting.obsidianFileName ?? Self.makeObsidianFileName(for: meeting)
+        return folder.appendingPathComponent(fileName)
+    }
+
+    func revealInObsidianFolder(_ meeting: MeetingRecord) {
+        if let exportedName = writeMarkdownFile(for: meeting),
+           let idx = meetings.firstIndex(where: { $0.id == meeting.id }),
+           meetings[idx].obsidianFileName != exportedName {
+            meetings[idx].obsidianFileName = exportedName
+            save()
+        }
+        if let url = obsidianExportFileURL(for: meeting),
+           FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            revealMarkdownInFinder(meeting)
+        }
+    }
+
+    @discardableResult
+    func writeMarkdownFile(for meeting: MeetingRecord) -> String? {
         let md = fullExportMarkdown(for: meeting)
         let url = markdownFileURL(for: meeting.id)
         try? md.data(using: .utf8)?.write(to: url, options: .atomic)
+
+        guard meeting.status == .ready,
+              isAutoExportToObsidianEnabled(),
+              let folderURL = resolvedObsidianFolderURL() else {
+            return meeting.obsidianFileName
+        }
+
+        let targetFileName = Self.makeObsidianFileName(for: meeting)
+        let targetURL = folderURL.appendingPathComponent(targetFileName)
+
+        if let prevName = meeting.obsidianFileName,
+           !prevName.isEmpty,
+           prevName != targetFileName {
+            let prevURL = folderURL.appendingPathComponent(prevName)
+            try? FileManager.default.removeItem(at: prevURL)
+        }
+
+        do {
+            try md.data(using: .utf8)?.write(to: targetURL, options: .atomic)
+            return targetFileName
+        } catch {
+            return meeting.obsidianFileName
+        }
     }
 
     func fullExportMarkdown(for meeting: MeetingRecord) -> String {
+        let yamlDateFormatter = DateFormatter()
+        yamlDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        yamlDateFormatter.dateFormat = "yyyy-MM-dd"
+
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
         formatter.dateStyle = .long
         formatter.timeStyle = .short
 
+        let escapedTitle = meeting.title
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let engineLabel = (meeting.transcriptionEngine ?? "whisper-windows")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
         let mins = Int((meeting.durationSeconds / 60).rounded())
         var parts: [String] = []
+        parts.append("---")
+        parts.append("voicetype_id: \(meeting.id.uuidString)")
+        parts.append("title: \"\(escapedTitle)\"")
+        parts.append("date: \(yamlDateFormatter.string(from: meeting.date))")
+        parts.append("source: voicetype")
+        parts.append("engine: \"\(engineLabel)\"")
+        parts.append("---")
+        parts.append("")
         parts.append("# \(meeting.title)")
         parts.append("- **Дата:** \(formatter.string(from: meeting.date))")
         parts.append("- **Длительность:** \(max(1, mins)) мин (\(Int(meeting.durationSeconds.rounded())) сек)")
         parts.append("- **Шаблон:** \(meeting.template.rawValue)")
         if let lang = meeting.languageSummary {
             parts.append("- **Язык речи:** \(lang)")
+        }
+        if let engine = meeting.transcriptionEngine, !engine.isEmpty {
+            parts.append("- **Транскрибация:** \(engine)")
         }
         parts.append("")
 
@@ -282,7 +374,7 @@ final class MeetingsStore: ObservableObject {
             for seg in meeting.segments where !seg.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let ts = MeetingRecord.formatTimestamp(seg.start)
                 let speaker = meeting.displayName(for: seg.speaker)
-                parts.append("- **[\(ts)] \(speaker):** \(seg.text)")
+                parts.append("- **[\(ts)] [\(speaker)]:** \(seg.text)")
             }
             parts.append("")
         }
@@ -290,18 +382,115 @@ final class MeetingsStore: ObservableObject {
         return parts.joined(separator: "\n")
     }
 
+    private func isAutoExportToObsidianEnabled() -> Bool {
+        UserDefaults.standard.object(forKey: "autoExportToObsidian") as? Bool ?? false
+    }
+
+    private func resolvedObsidianFolderURL() -> URL? {
+        let rawPath = (UserDefaults.standard.string(forKey: "obsidianRecapsFolder") ?? SettingsStore.defaultObsidianRecapsFolder)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawPath.isEmpty else { return nil }
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: rawPath, isDirectory: &isDir), isDir.boolValue {
+            return URL(fileURLWithPath: rawPath, isDirectory: true)
+        }
+        return nil
+    }
+
+    static func makeObsidianFileName(for meeting: MeetingRecord) -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "yyyy-MM-dd_HH-mm"
+        let prefix = df.string(from: meeting.date)
+        let slug = slugifyTitle(meeting.title)
+        return "\(prefix)_\(slug)_vt.md"
+    }
+
+    private static func slugifyTitle(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowed = CharacterSet.alphanumerics
+        var result = ""
+        var lastWasDash = false
+        for scalar in trimmed.unicodeScalars {
+            if allowed.contains(scalar) {
+                result.unicodeScalars.append(scalar)
+                lastWasDash = false
+            } else if !lastWasDash {
+                result.append("-")
+                lastWasDash = true
+            }
+        }
+        let cleaned = result.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        if cleaned.isEmpty {
+            return "vstrecha"
+        }
+        if cleaned.count > 80 {
+            return String(cleaned.prefix(80)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        }
+        return cleaned
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: indexFileURL) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard var loaded = try? decoder.decode([MeetingRecord].self, from: data) else { return }
-        // If app was quit mid-recording, mark interrupted recordings gracefully
+        var didRecover = false
+
         for i in loaded.indices {
-            if loaded[i].status == .recording {
-                loaded[i].status = .error("Запись была прервана при закрытии приложения.")
+            if loaded[i].status == .recording || loaded[i].status == .transcribing {
+                let dir = baseDirectory.appendingPathComponent(loaded[i].id.uuidString, isDirectory: true)
+                let micURL = dir.appendingPathComponent("mic.wav")
+                let micRawURL = dir.appendingPathComponent("mic_raw.wav")
+                let sysURL = dir.appendingPathComponent("sys.wav")
+                let sysRawURL = dir.appendingPathComponent("sys_raw.wav")
+
+                if !FileManager.default.fileExists(atPath: micURL.path),
+                   FileManager.default.fileExists(atPath: micRawURL.path) {
+                    try? FileManager.default.moveItem(at: micRawURL, to: micURL)
+                }
+                if !FileManager.default.fileExists(atPath: sysURL.path),
+                   FileManager.default.fileExists(atPath: sysRawURL.path) {
+                    try? FileManager.default.moveItem(at: sysRawURL, to: sysURL)
+                }
+
+                let existingAudioURL: URL? = {
+                    if let name = loaded[i].audioFileName {
+                        let u = dir.appendingPathComponent(name)
+                        if FileManager.default.fileExists(atPath: u.path) { return u }
+                    }
+                    if FileManager.default.fileExists(atPath: micURL.path) { return micURL }
+                    return nil
+                }()
+
+                if let audioURL = existingAudioURL,
+                   let attrs = try? FileManager.default.attributesOfItem(atPath: audioURL.path),
+                   let size = (attrs[.size] as? NSNumber)?.int64Value,
+                   size > 32_000 {
+                    loaded[i].audioFileName = audioURL.lastPathComponent
+                    if FileManager.default.fileExists(atPath: sysURL.path),
+                       let sysAttrs = try? FileManager.default.attributesOfItem(atPath: sysURL.path),
+                       let sysSize = (sysAttrs[.size] as? NSNumber)?.int64Value,
+                       sysSize > 3_200 {
+                        loaded[i].sysAudioFileName = sysURL.lastPathComponent
+                        loaded[i].stereoParties = true
+                    }
+                    let estimatedDur = Double(max(0, size - 44)) / 32_000.0
+                    if loaded[i].durationSeconds <= 0 {
+                        loaded[i].durationSeconds = estimatedDur
+                    }
+                    loaded[i].status = .queued("Запись восстановлена после перезапуска и ждёт расшифровки")
+                } else {
+                    loaded[i].status = .error("Запись была прервана при закрытии приложения.")
+                }
+                didRecover = true
             }
         }
+
         meetings = loaded
+        if didRecover {
+            save()
+        }
     }
 
     private func save() {
