@@ -246,31 +246,90 @@ struct GapiClient {
         throw try decodeError(data)
     }
 
+    private static let uploadBarShare: Double = 0.25
+
     func transcribeMeeting(
         fileURL: URL,
         stereoParties: Bool,
         enableSummary: Bool,
-        onProgress: (@Sendable (Double?) -> Void)? = nil
+        expectedDuration: Double? = nil,
+        onProgress: (@Sendable (MeetingTranscriptionProgress) -> Void)? = nil
     ) async throws -> GapiTranscription {
         let boundary = "voicetype-meeting-\(UUID().uuidString)"
+        let uploadWeight = Self.uploadBarShare
+
+        onProgress?(
+            MeetingTranscriptionProgress(
+                stage: .preparingAudio,
+                overallFraction: 0.02,
+                uploadPhaseEndFraction: uploadWeight,
+                uploadCompleted: false,
+                processedSeconds: 0,
+                totalSeconds: expectedDuration
+            )
+        )
+
+        let tempMultipartURL = try await Task.detached(priority: .userInitiated) {
+            try Self.writeMeetingMultipartFile(
+                fileURL: fileURL,
+                boundary: boundary,
+                stereoParties: stereoParties,
+                enableSummary: enableSummary
+            )
+        }.value
+        defer { try? FileManager.default.removeItem(at: tempMultipartURL) }
+
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: tempMultipartURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/jobs"))
         request.httpMethod = "POST"
         request.timeoutInterval = 300
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try meetingMultipartBody(
-            fileURL: fileURL,
-            boundary: boundary,
-            stereoParties: stereoParties,
-            enableSummary: enableSummary
+
+        onProgress?(
+            MeetingTranscriptionProgress(
+                stage: .uploading(bytesSent: 0, totalBytes: fileSize),
+                overallFraction: 0.02,
+                uploadPhaseEndFraction: uploadWeight,
+                uploadCompleted: false,
+                processedSeconds: 0,
+                totalSeconds: expectedDuration
+            )
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let delegate = UploadProgressDelegate(fallbackTotalBytes: fileSize) { sent, expected, _ in
+            let total = expected > 0 ? expected : fileSize
+            let ratio = total > 0 ? min(1.0, Double(sent) / Double(total)) : 1.0
+            let overall = 0.02 + (uploadWeight - 0.02) * ratio
+            onProgress?(
+                MeetingTranscriptionProgress(
+                    stage: .uploading(bytesSent: sent, totalBytes: total),
+                    overallFraction: overall,
+                    uploadPhaseEndFraction: uploadWeight,
+                    uploadCompleted: false,
+                    processedSeconds: 0,
+                    totalSeconds: expectedDuration
+                )
+            )
+        }
+
+        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: tempMultipartURL, delegate: delegate)
         guard let http = response as? HTTPURLResponse else {
             throw GapiError(code: "no_response", hint: nil)
         }
 
         if http.statusCode == 200 {
+            onProgress?(
+                MeetingTranscriptionProgress(
+                    stage: .transcribing(processedSeconds: expectedDuration ?? 0, totalSeconds: expectedDuration),
+                    overallFraction: 1.0,
+                    uploadPhaseEndFraction: uploadWeight,
+                    uploadCompleted: true,
+                    processedSeconds: expectedDuration ?? 0,
+                    totalSeconds: expectedDuration
+                )
+            )
             let result = try JSONDecoder().decode(TranscribeResult.self, from: data)
             return result.toTranscription()
         }
@@ -280,7 +339,22 @@ struct GapiClient {
             guard let jobId = accepted.resolvedId else {
                 throw GapiError(code: "missing_job_id", hint: "Сервер вернул 202 без идентификатора задачи")
             }
-            return try await pollForResult(jobId: jobId, maxPolls: 900, onProgress: onProgress)
+            onProgress?(
+                MeetingTranscriptionProgress(
+                    stage: .waitingInServerQueue,
+                    overallFraction: uploadWeight,
+                    uploadPhaseEndFraction: uploadWeight,
+                    uploadCompleted: true,
+                    processedSeconds: 0,
+                    totalSeconds: expectedDuration
+                )
+            )
+            return try await pollForResult(
+                jobId: jobId,
+                maxPolls: 900,
+                expectedDuration: expectedDuration,
+                onProgress: onProgress
+            )
         }
 
         throw try decodeError(data)
@@ -314,10 +388,12 @@ struct GapiClient {
         jobId: String,
         maxPolls: Int = 60,
         applyLocalFixes: Bool = true,
-        onProgress: (@Sendable (Double?) -> Void)? = nil
+        expectedDuration: Double? = nil,
+        onProgress: (@Sendable (MeetingTranscriptionProgress) -> Void)? = nil
     ) async throws -> GapiTranscription {
         let statusURL = baseURL.appendingPathComponent("v1/jobs/\(jobId)")
         let resultURL = baseURL.appendingPathComponent("v1/jobs/\(jobId)/result")
+        let uploadWeight = Self.uploadBarShare
 
         for _ in 0..<maxPolls {
             try Task.checkCancellation()
@@ -328,8 +404,36 @@ struct GapiClient {
             let (statusData, _) = try await URLSession.shared.data(for: statusRequest)
             let status = try JSONDecoder().decode(JobStatus.self, from: statusData)
 
-            if let prog = status.progress_seconds {
-                onProgress?(prog)
+            let resolvedTotal = (status.audio_seconds ?? 0) > 0 ? status.audio_seconds : expectedDuration
+            let processed = max(0, status.progress_seconds ?? 0)
+            if status.state.lowercased() == "queued" && processed <= 0 {
+                onProgress?(
+                    MeetingTranscriptionProgress(
+                        stage: .waitingInServerQueue,
+                        overallFraction: uploadWeight,
+                        uploadPhaseEndFraction: uploadWeight,
+                        uploadCompleted: true,
+                        processedSeconds: 0,
+                        totalSeconds: resolvedTotal
+                    )
+                )
+            } else {
+                let transcribeRatio: Double
+                if let total = resolvedTotal, total > 0 {
+                    transcribeRatio = min(1.0, max(0.0, processed / total))
+                } else {
+                    transcribeRatio = 0
+                }
+                onProgress?(
+                    MeetingTranscriptionProgress(
+                        stage: .transcribing(processedSeconds: processed, totalSeconds: resolvedTotal),
+                        overallFraction: uploadWeight + (1.0 - uploadWeight) * transcribeRatio,
+                        uploadPhaseEndFraction: uploadWeight,
+                        uploadCompleted: true,
+                        processedSeconds: processed,
+                        totalSeconds: resolvedTotal
+                    )
+                )
             }
 
             switch status.state {
@@ -401,46 +505,66 @@ struct GapiClient {
         return body
     }
 
-    private func meetingMultipartBody(
+    private static func writeMeetingMultipartFile(
         fileURL: URL,
         boundary: String,
         stereoParties: Bool,
         enableSummary: Bool
-    ) throws -> Data {
-        var body = Data()
-        let audioData = try Data(contentsOf: fileURL)
-        let mimeType = fileURL.pathExtension.lowercased() == "m4a" ? "audio/mp4" : "audio/wav"
+    ) throws -> URL {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("voicetype-gapi-upload-\(UUID().uuidString).multipart")
+        FileManager.default.createFile(atPath: tempURL.path, contents: nil)
 
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-        body.append(audioData)
-        body.append("\r\n".data(using: .utf8)!)
+        do {
+            let outHandle = try FileHandle(forWritingTo: tempURL)
+            defer { try? outHandle.close() }
 
-        let settingsDict: [String: Any] = [
-            "formatting": true,
-            "itn": true,
-            "fuzzy_itn": true,
-            "language_detection": true,
-            "stereo_channels_as_speakers": stereoParties,
-            "diarization": !stereoParties,
-            "gender": false,
-            "call_outcome": false,
-            "speaker_roles": false,
-            "speaker_identification": false,
-            "voice_events": false,
-            "summary": enableSummary,
-            "pii": false,
-            "word_timestamps": false
-        ]
-        let settingsData = try JSONSerialization.data(withJSONObject: settingsDict)
+            let mimeType = fileURL.pathExtension.lowercased() == "m4a" ? "audio/mp4" : "audio/wav"
+            var header = Data()
+            header.append("--\(boundary)\r\n".data(using: .utf8)!)
+            header.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
+            header.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+            try outHandle.write(contentsOf: header)
 
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"settings\"\r\n\r\n".data(using: .utf8)!)
-        body.append(settingsData)
-        body.append("\r\n".data(using: .utf8)!)
+            let inHandle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? inHandle.close() }
+            while true {
+                let chunk = try inHandle.read(upToCount: 1_048_576) ?? Data()
+                if chunk.isEmpty { break }
+                try outHandle.write(contentsOf: chunk)
+            }
 
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        return body
+            let settingsDict: [String: Any] = [
+                "formatting": true,
+                "itn": true,
+                "fuzzy_itn": true,
+                "language_detection": true,
+                "stereo_channels_as_speakers": stereoParties,
+                "diarization": !stereoParties,
+                "gender": false,
+                "call_outcome": false,
+                "speaker_roles": false,
+                "speaker_identification": false,
+                "voice_events": false,
+                "summary": enableSummary,
+                "pii": false,
+                "word_timestamps": false
+            ]
+            let settingsData = try JSONSerialization.data(withJSONObject: settingsDict)
+
+            var footer = Data()
+            footer.append("\r\n".data(using: .utf8)!)
+            footer.append("--\(boundary)\r\n".data(using: .utf8)!)
+            footer.append("Content-Disposition: form-data; name=\"settings\"\r\n\r\n".data(using: .utf8)!)
+            footer.append(settingsData)
+            footer.append("\r\n".data(using: .utf8)!)
+            footer.append("--\(boundary)--\r\n".data(using: .utf8)!)
+            try outHandle.write(contentsOf: footer)
+
+            return tempURL
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw error
+        }
     }
 }

@@ -24,17 +24,57 @@ enum DashboardSection: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var meetingsStore: MeetingsStore
     @Environment(\.colorScheme) private var colorScheme
 
-    private var chrome: VoiceChrome { VoiceChrome(scheme: colorScheme) }
+    @State private var sidebarVisible = true
+    @State private var userToggledSidebar = false
+    @State private var hoveredSection: DashboardSection?
+    @State private var hoveredMeetingID: UUID?
+
+    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+
+    private var currentSection: DashboardSection {
+        appState.selectedSection ?? .home
+    }
+
+    private var activeProcessingCount: Int {
+        meetingsStore.meetings.filter { meeting in
+            switch meeting.status {
+            case .queued, .transcribing, .summarizing:
+                return true
+            case .recording, .ready, .error:
+                return false
+            }
+        }.count
+    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            detail
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                if sidebarVisible {
+                    claudeSidebar
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+
+                mainCanvas
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: geo.size.width) { _, newWidth in
+                let threshold: CGFloat = currentSection == .meetings ? 940 : 780
+                if newWidth < threshold && sidebarVisible && !userToggledSidebar {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        sidebarVisible = false
+                    }
+                } else if newWidth >= threshold + 60 && !sidebarVisible && !userToggledSidebar {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        sidebarVisible = true
+                    }
+                }
+            }
         }
-        .frame(minWidth: 920, minHeight: 620)
-        .background(chrome.canvas)
+        .frame(minWidth: 740, minHeight: 540)
+        .background(theme.canvas)
         .preferredColorScheme(settings.appearance.colorScheme)
         .onChange(of: settings.appearance) { _, mode in
             DashboardWindowController.shared.applyAppearance(mode)
@@ -50,137 +90,367 @@ struct SettingsView: View {
         }
     }
 
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("VoiceType")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(chrome.ink)
-                .padding(.horizontal, 6)
-                .padding(.bottom, 8)
+    // MARK: - Claude-Style Sidebar
 
-            ForEach(DashboardSection.allCases) { section in
-                sidebarRow(section)
+    private var claudeSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Primary Claude-style "+ New" CTA + sidebar collapse button
+            HStack(spacing: 8) {
+                if let activeID = appState.activeMeetingID {
+                    Button {
+                        appState.selectedMeetingID = activeID
+                        appState.selectedSection = .meetings
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "waveform")
+                                .symbolEffect(.variableColor.iterative, isActive: true)
+                            Text("Запись")
+                                .font(.callout.weight(.semibold))
+                                .lineLimit(1)
+                            Spacer(minLength: 2)
+                            Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(theme.danger, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        if let id = appState.startMeeting(
+                            template: .general,
+                            audioSource: settings.meetingAudioSource
+                        ) {
+                            appState.selectedMeetingID = id
+                            appState.selectedSection = .meetings
+                        }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(theme.ink)
+                            Text("Новая встреча")
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(theme.ink)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(theme.border, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    userToggledSidebar = true
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        sidebarVisible = false
+                    }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(theme.secondaryInk)
+                        .frame(width: 28, height: 28)
+                        .background(theme.hoverFill.opacity(0.6), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Скрыть боковую панель")
             }
-            Spacer()
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+
+            // Navigation items
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(DashboardSection.allCases) { section in
+                    sidebarNavRow(section)
+                }
+            }
+            .padding(.horizontal, 10)
+
+            if !meetingsStore.meetings.isEmpty {
+                Text("Недавние")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(theme.tertiaryInk)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 6)
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(meetingsStore.meetings.prefix(8)) { meeting in
+                            recentMeetingRow(meeting)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                }
+                .scrollIndicators(.hidden)
+            } else {
+                Spacer()
+            }
+
+            Spacer(minLength: 8)
+
+            // Bottom status pill
+            Divider()
+                .overlay(theme.border)
+
+            Button {
+                appState.selectedSection = .settings
+            } label: {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(sidebarStatusColor)
+                        .frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(sidebarStatusTitle)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(theme.ink)
+                            .lineLimit(1)
+                        Text(settings.hotkey.rawValue)
+                            .font(.caption2)
+                            .foregroundStyle(theme.secondaryInk)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryInk)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(10)
         }
-        .padding(.top, 36)
-        .padding(.horizontal, 16)
-        .frame(width: 128)
+        .frame(width: 222)
         .frame(maxHeight: .infinity)
-        .background(chrome.canvas)
+        .background(theme.sidebar)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(chrome.hairline)
+                .fill(theme.border)
                 .frame(width: 1)
         }
     }
 
-    private func sidebarRow(_ section: DashboardSection) -> some View {
-        let selected = (appState.selectedSection ?? .home) == section
+    private func sidebarNavRow(_ section: DashboardSection) -> some View {
+        let isSelected = currentSection == section
+        let isHovered = hoveredSection == section
+
         return Button {
             appState.selectedSection = section
         } label: {
-            VStack(spacing: 7) {
+            HStack(spacing: 9) {
                 Image(systemName: section.systemImage)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? theme.ink : theme.secondaryInk)
+                    .frame(width: 18)
+
                 Text(section.rawValue)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.callout.weight(isSelected ? .medium : .regular))
+                    .foregroundStyle(theme.ink)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(selected ? Color.white : chrome.ink)
-            .frame(width: 96, height: 96)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(selected ? chrome.accent : chrome.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(selected ? Color.white.opacity(0.14) : chrome.hairline)
-            )
-            .shadow(
-                color: selected ? chrome.accent.opacity(0.32) : chrome.shadow,
-                radius: selected ? 12 : 8,
-                y: selected ? 6 : 3
-            )
-            .overlay(alignment: .topTrailing) {
-                if section == .meetings, appState.activeMeetingID != nil {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 8, height: 8)
-                        .padding(10)
+
+                Spacer(minLength: 4)
+
+                if section == .meetings, appState.activeMeetingID == nil, activeProcessingCount > 0 {
+                    Text("\(activeProcessingCount)")
+                        .font(.caption2.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(theme.accentInk)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(theme.accentSoft, in: Capsule())
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? theme.selectedFill : (isHovered ? theme.hoverFill : Color.clear))
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredSection = hovering ? section : (hoveredSection == section ? nil : hoveredSection)
+        }
+    }
+
+    private func recentMeetingRow(_ meeting: MeetingRecord) -> some View {
+        let isActiveMeeting = currentSection == .meetings && appState.selectedMeetingID == meeting.id
+        let isHovered = hoveredMeetingID == meeting.id
+
+        return Button {
+            appState.selectedMeetingID = meeting.id
+            appState.selectedSection = .meetings
+        } label: {
+            HStack(spacing: 7) {
+                if case .transcribing = meeting.status {
+                    ProgressView().controlSize(.mini)
+                } else if case .summarizing = meeting.status {
+                    ProgressView().controlSize(.mini)
+                } else if meeting.status == .recording {
+                    Circle().fill(theme.danger).frame(width: 6, height: 6)
+                }
+                Text(meeting.title)
+                    .font(.caption.weight(isActiveMeeting ? .semibold : .regular))
+                    .foregroundStyle(isActiveMeeting ? theme.ink : theme.secondaryInk)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isActiveMeeting ? theme.selectedFill : (isHovered ? theme.hoverFill : Color.clear))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredMeetingID = hovering ? meeting.id : (hoveredMeetingID == meeting.id ? nil : hoveredMeetingID)
+        }
+    }
+
+    private var sidebarStatusColor: Color {
+        switch appState.status {
+        case .idle: return appState.hotkeyActive ? theme.success : theme.warning
+        case .recording: return theme.danger
+        case .transcribing, .cleaning: return theme.accent
+        case .error: return theme.warning
+        }
+    }
+
+    private var sidebarStatusTitle: String {
+        switch appState.status {
+        case .idle: return appState.hotkeyActive ? "Готов слушать" : "Нужны права"
+        case .recording: return "Запись голоса…"
+        case .transcribing: return "Распознаю…"
+        case .cleaning: return "Обрабатываю…"
+        case .error: return "Ошибка"
+        }
+    }
+
+    // MARK: - Main Canvas
+
+    private var mainCanvas: some View {
+        VStack(spacing: 0) {
+            if !sidebarVisible {
+                HStack(spacing: 10) {
+                    Button {
+                        userToggledSidebar = false
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            sidebarVisible = true
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(theme.secondaryInk)
+                            .frame(width: 28, height: 28)
+                            .background(theme.hoverFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Показать боковую панель")
+
+                    Menu {
+                        ForEach(DashboardSection.allCases) { section in
+                            Button {
+                                appState.selectedSection = section
+                            } label: {
+                                Label(section.rawValue, systemImage: section.systemImage)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: currentSection.systemImage)
+                                .foregroundStyle(theme.secondaryInk)
+                            Text(currentSection.rawValue)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(theme.ink)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(theme.secondaryInk)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(theme.border, lineWidth: 1)
+                        )
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+
+                    Spacer()
+
+                    if appState.activeMeetingID == nil {
+                        Button {
+                            if let id = appState.startMeeting(
+                                template: .general,
+                                audioSource: settings.meetingAudioSource
+                            ) {
+                                appState.selectedMeetingID = id
+                                appState.selectedSection = .meetings
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "plus")
+                                Text("Новая встреча")
+                            }
+                        }
+                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+                    } else {
+                        Button {
+                            appState.selectedMeetingID = appState.activeMeetingID
+                            appState.selectedSection = .meetings
+                        } label: {
+                            HStack(spacing: 5) {
+                                Circle().fill(Color.white).frame(width: 6, height: 6)
+                                Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
+                                    .monospacedDigit()
+                            }
+                        }
+                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(theme.sidebar.opacity(0.6))
+
+                Divider().overlay(theme.border)
+            }
+
+            detailView
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .background(theme.canvas)
     }
 
     @ViewBuilder
-    private var detail: some View {
-        Group {
-            switch appState.selectedSection {
-            case .home, .none:
-                DashboardHomeView()
-            case .meetings:
-                DashboardMeetingsView()
-            case .history:
-                DashboardHistoryView()
-            case .dictionary:
-                DashboardDictionaryView()
-            case .settings:
-                DashboardSettingsView()
-            }
+    private var detailView: some View {
+        switch currentSection {
+        case .home:
+            DashboardHomeView()
+        case .meetings:
+            DashboardMeetingsView()
+        case .history:
+            DashboardHistoryView()
+        case .dictionary:
+            DashboardDictionaryView()
+        case .settings:
+            DashboardSettingsView()
         }
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(chrome.canvas)
-    }
-}
-
-struct VoiceChrome {
-    var scheme: ColorScheme
-
-    var canvas: Color {
-        scheme == .dark
-            ? Color(red: 0.075, green: 0.078, blue: 0.090)
-            : Color(red: 0.925, green: 0.933, blue: 0.953)
-    }
-
-    var card: Color {
-        scheme == .dark
-            ? Color(red: 0.133, green: 0.141, blue: 0.165)
-            : Color.white
-    }
-
-    var ink: Color {
-        scheme == .dark
-            ? Color.white.opacity(0.92)
-            : Color(red: 0.11, green: 0.12, blue: 0.15)
-    }
-
-    var quiet: Color {
-        scheme == .dark
-            ? Color.white.opacity(0.58)
-            : Color(red: 0.38, green: 0.41, blue: 0.48)
-    }
-
-    var accent: Color { Color(red: 0.231, green: 0.447, blue: 0.980) }
-
-    var hairline: Color {
-        scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08)
-    }
-
-    var shadow: Color {
-        scheme == .dark ? Color.black.opacity(0.35) : Color.black.opacity(0.06)
-    }
-
-    static let windowBackground: NSColor = NSColor(name: "VoiceTypeCanvas") { appearance in
-        let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        if dark {
-            return NSColor(srgbRed: 0.075, green: 0.078, blue: 0.090, alpha: 1)
-        }
-        return NSColor(srgbRed: 0.925, green: 0.933, blue: 0.953, alpha: 1)
     }
 }
 
@@ -228,12 +498,13 @@ final class DashboardWindowController {
             let hostingController = NSHostingController(rootView: rootView)
             let newWindow = NSWindow(contentViewController: hostingController)
             newWindow.title = "VoiceType"
-            newWindow.titleVisibility = .hidden
+            newWindow.titleVisibility = .visible
             newWindow.titlebarAppearsTransparent = true
-            newWindow.backgroundColor = VoiceChrome.windowBackground
+            newWindow.backgroundColor = ClaudeTheme.windowBackgroundNSColor
             newWindow.isMovableByWindowBackground = false
-            newWindow.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-            newWindow.setContentSize(NSSize(width: 980, height: 660))
+            newWindow.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            newWindow.setContentSize(NSSize(width: 1120, height: 700))
+            newWindow.minSize = NSSize(width: 740, height: 540)
             newWindow.center()
             newWindow.isReleasedWhenClosed = false
             self.window = newWindow
@@ -258,6 +529,6 @@ final class DashboardWindowController {
         case .dark:
             window?.appearance = NSAppearance(named: .darkAqua)
         }
-        window?.backgroundColor = VoiceChrome.windowBackground
+        window?.backgroundColor = ClaudeTheme.windowBackgroundNSColor
     }
 }

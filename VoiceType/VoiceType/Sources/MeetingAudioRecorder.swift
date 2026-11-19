@@ -21,12 +21,14 @@ final class MeetingAudioRecorder: NSObject {
     private var sysFileURL: URL?
     private var requestedSource: MeetingAudioSource = .micAndSystem
     private(set) var systemAudioActive: Bool = false
+    private(set) var systemAudioError: String? = nil
 
     func start(in directory: URL, source: MeetingAudioSource) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         activeDirectory = directory
         requestedSource = source
         systemAudioActive = false
+        systemAudioError = nil
 
         let micURL = directory.appendingPathComponent("mic.wav")
         let sysURL = directory.appendingPathComponent("sys.wav")
@@ -68,7 +70,13 @@ final class MeetingAudioRecorder: NSObject {
             try Task.checkCancellation()
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             try Task.checkCancellation()
-            guard let display = content.displays.first else { return }
+            guard let display = content.displays.first else {
+                await MainActor.run {
+                    self.systemAudioActive = false
+                    self.systemAudioError = "Не найден активный дисплей для захвата системного звука."
+                }
+                return
+            }
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
             let config = SCStreamConfiguration()
@@ -96,11 +104,13 @@ final class MeetingAudioRecorder: NSObject {
                 self.streamOutput = output
                 self.scStream = stream
                 self.systemAudioActive = true
+                self.systemAudioError = nil
             }
         } catch {
             // Graceful fallback to microphone-only if Screen/Audio capture is denied or unavailable
             await MainActor.run {
                 self.systemAudioActive = false
+                self.systemAudioError = error.localizedDescription
             }
         }
     }
@@ -327,17 +337,28 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput {
         let numSamples = CMSampleBufferGetNumSamples(sampleBuffer)
         guard numSamples > 0 else { return }
 
-        var blockBuffer: CMBlockBuffer?
-        var audioBufferList = AudioBufferList(
-            mNumberBuffers: 1,
-            mBuffers: AudioBuffer(mNumberChannels: 1, mDataByteSize: 0, mData: nil)
+        var neededSize = 0
+        CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: &neededSize,
+            bufferListOut: nil,
+            bufferListSize: 0,
+            blockBufferAllocator: nil,
+            blockBufferMemoryAllocator: nil,
+            flags: 0,
+            blockBufferOut: nil
         )
+        let allocSize = max(MemoryLayout<AudioBufferList>.size, neededSize)
+        let rawABL = UnsafeMutableRawPointer.allocate(byteCount: allocSize, alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { rawABL.deallocate() }
+        let ablPtr = rawABL.bindMemory(to: AudioBufferList.self, capacity: 1)
 
+        var blockBuffer: CMBlockBuffer?
         let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
             sampleBuffer,
             bufferListSizeNeededOut: nil,
-            bufferListOut: &audioBufferList,
-            bufferListSize: MemoryLayout<AudioBufferList>.size,
+            bufferListOut: ablPtr,
+            bufferListSize: allocSize,
             blockBufferAllocator: nil,
             blockBufferMemoryAllocator: nil,
             flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment,
@@ -345,8 +366,97 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput {
         )
         guard status == noErr else { return }
 
-        let buf = audioBufferList.mBuffers
-        guard let rawPtr = buf.mData else { return }
+        let bufferList = UnsafeMutableAudioBufferListPointer(ablPtr)
+        guard !bufferList.isEmpty else { return }
+
+        let channelsPerBuffer = max(1, Int(asbdPtr.pointee.mChannelsPerFrame))
+        let isNonInterleaved = (asbdPtr.pointee.mFormatFlags & kAudioFormatFlagIsNonInterleaved) != 0
+        let isFloat = (asbdPtr.pointee.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+        let srcSampleRate = asbdPtr.pointee.mSampleRate > 0 ? asbdPtr.pointee.mSampleRate : 16_000.0
+
+        var monoSamples = [Float]()
+        if isNonInterleaved || bufferList.count > 1 {
+            var minCount = numSamples
+            for b in bufferList {
+                guard b.mData != nil else { return }
+                let bytesPerSample = isFloat ? MemoryLayout<Float>.size : MemoryLayout<Int16>.size
+                minCount = min(minCount, Int(b.mDataByteSize) / bytesPerSample)
+            }
+            guard minCount > 0 else { return }
+            monoSamples = [Float](repeating: 0, count: minCount)
+            let invBufs = 1.0 / Float(bufferList.count)
+            for b in bufferList {
+                guard let ptr = b.mData else { continue }
+                if isFloat {
+                    let fPtr = ptr.assumingMemoryBound(to: Float.self)
+                    for i in 0..<minCount {
+                        monoSamples[i] += fPtr[i] * invBufs
+                    }
+                } else {
+                    let iPtr = ptr.assumingMemoryBound(to: Int16.self)
+                    let invScale = invBufs / Float(Int16.max)
+                    for i in 0..<minCount {
+                        monoSamples[i] += Float(iPtr[i]) * invScale
+                    }
+                }
+            }
+        } else {
+            let buf = bufferList[0]
+            guard let rawPtr = buf.mData else { return }
+            if isFloat {
+                let floatPtr = rawPtr.assumingMemoryBound(to: Float.self)
+                let totalFloats = Int(buf.mDataByteSize) / MemoryLayout<Float>.size
+                let actualCount = min(numSamples, totalFloats / channelsPerBuffer)
+                guard actualCount > 0 else { return }
+                monoSamples.reserveCapacity(actualCount)
+                for i in 0..<actualCount {
+                    if channelsPerBuffer == 1 {
+                        monoSamples.append(floatPtr[i])
+                    } else {
+                        var sum: Float = 0
+                        for c in 0..<channelsPerBuffer {
+                            sum += floatPtr[i * channelsPerBuffer + c]
+                        }
+                        monoSamples.append(sum / Float(channelsPerBuffer))
+                    }
+                }
+            } else {
+                let int16Ptr = rawPtr.assumingMemoryBound(to: Int16.self)
+                let totalInts = Int(buf.mDataByteSize) / MemoryLayout<Int16>.size
+                let actualCount = min(numSamples, totalInts / channelsPerBuffer)
+                guard actualCount > 0 else { return }
+                monoSamples.reserveCapacity(actualCount)
+                for i in 0..<actualCount {
+                    if channelsPerBuffer == 1 {
+                        monoSamples.append(Float(int16Ptr[i]) / Float(Int16.max))
+                    } else {
+                        var sum: Float = 0
+                        for c in 0..<channelsPerBuffer {
+                            sum += Float(int16Ptr[i * channelsPerBuffer + c])
+                        }
+                        monoSamples.append((sum / Float(channelsPerBuffer)) / Float(Int16.max))
+                    }
+                }
+            }
+        }
+
+        if abs(srcSampleRate - 16_000.0) > 1.0 && monoSamples.count > 1 {
+            let ratio = 16_000.0 / srcSampleRate
+            let outCount = max(1, Int((Double(monoSamples.count) * ratio).rounded()))
+            var resampled = [Float](repeating: 0, count: outCount)
+            let maxIdx = monoSamples.count - 1
+            for i in 0..<outCount {
+                let srcPos = Double(i) / ratio
+                let idx0 = min(maxIdx, Int(srcPos))
+                let idx1 = min(maxIdx, idx0 + 1)
+                let frac = Float(srcPos - Double(idx0))
+                resampled[i] = monoSamples[idx0] * (1.0 - frac) + monoSamples[idx1] * frac
+            }
+            monoSamples = resampled
+        }
+
+        let outFrames = monoSamples.count
+        guard outFrames > 0 else { return }
 
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
@@ -385,56 +495,20 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput {
             }
         }
 
-        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: AVAudioFrameCount(numSamples)),
+        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: AVAudioFrameCount(outFrames)),
               let dst = pcmBuffer.int16ChannelData?[0] else {
             return
         }
 
-        let channels = max(1, Int(asbdPtr.pointee.mChannelsPerFrame))
-        let isFloat = (asbdPtr.pointee.mFormatFlags & kAudioFormatFlagIsFloat) != 0
-        let actualCount: Int
-
-        if isFloat {
-            let floatPtr = rawPtr.assumingMemoryBound(to: Float.self)
-            let totalFloats = Int(buf.mDataByteSize) / MemoryLayout<Float>.size
-            actualCount = min(numSamples, totalFloats / channels)
-            for i in 0..<actualCount {
-                let sample: Float
-                if channels == 1 {
-                    sample = floatPtr[i]
-                } else {
-                    var sum: Float = 0
-                    for c in 0..<channels {
-                        sum += floatPtr[i * channels + c]
-                    }
-                    sample = sum / Float(channels)
-                }
-                let clamped = max(-1.0, min(1.0, sample))
-                dst[i] = Int16(clamped * Float(Int16.max))
-            }
-        } else {
-            let int16Ptr = rawPtr.assumingMemoryBound(to: Int16.self)
-            let totalInts = Int(buf.mDataByteSize) / MemoryLayout<Int16>.size
-            actualCount = min(numSamples, totalInts / channels)
-            for i in 0..<actualCount {
-                if channels == 1 {
-                    dst[i] = int16Ptr[i]
-                } else {
-                    var sum = 0
-                    for c in 0..<channels {
-                        sum += Int(int16Ptr[i * channels + c])
-                    }
-                    dst[i] = Int16(max(Int(Int16.min), min(Int(Int16.max), sum / channels)))
-                }
-            }
+        for i in 0..<outFrames {
+            let clamped = max(-1.0, min(1.0, monoSamples[i]))
+            dst[i] = Int16(clamped * Float(Int16.max))
         }
-
-        guard actualCount > 0 else { return }
-        pcmBuffer.frameLength = AVAudioFrameCount(actualCount)
+        pcmBuffer.frameLength = AVAudioFrameCount(outFrames)
 
         do {
             try file.write(from: pcmBuffer)
-            totalSamplesWritten += actualCount
+            totalSamplesWritten += outFrames
         } catch {
             // Ignore single-buffer write glitches
         }

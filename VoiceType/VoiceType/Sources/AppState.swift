@@ -23,8 +23,11 @@ final class AppState: ObservableObject {
     @Published var accessibilityAuthorized: Bool = PermissionsHelper.accessibilityAuthorized()
     @Published var screenCaptureAuthorized: Bool = PermissionsHelper.screenCaptureAuthorized()
     @Published var activeMeetingID: UUID? = nil
+    @Published var selectedMeetingID: UUID? = nil
     @Published var meetingElapsedSeconds: TimeInterval = 0
     @Published var activeMeetingSystemAudioCapturing: Bool = false
+    @Published var activeMeetingSystemAudioError: String? = nil
+    @Published var meetingTranscriptionProgress: [UUID: MeetingTranscriptionProgress] = [:]
 
     let settings: SettingsStore
     let history: HistoryStore
@@ -96,7 +99,7 @@ final class AppState: ObservableObject {
             }
         }
 
-        // Poll queued meetings every 30s so recordings waiting for farrukh-pc auto-transcribe on reconnect.
+        // Poll queued meetings every 30s so recordings waiting for external server auto-transcribe on reconnect.
         meetingQueueTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.processQueuedMeetingsIfNeeded()
@@ -330,6 +333,7 @@ final class AppState: ObservableObject {
             meetingStartedAt = Date()
             meetingElapsedSeconds = 0
             activeMeetingSystemAudioCapturing = false
+            activeMeetingSystemAudioError = nil
             meetingTimer?.invalidate()
             meetingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
                 Task { @MainActor in
@@ -338,6 +342,10 @@ final class AppState: ObservableObject {
                     let sysActive = self.meetingRecorder.systemAudioActive
                     if self.activeMeetingSystemAudioCapturing != sysActive {
                         self.activeMeetingSystemAudioCapturing = sysActive
+                    }
+                    let sysError = self.meetingRecorder.systemAudioError
+                    if self.activeMeetingSystemAudioError != sysError {
+                        self.activeMeetingSystemAudioError = sysError
                     }
                 }
             }
@@ -359,6 +367,7 @@ final class AppState: ObservableObject {
         activeMeetingID = nil
         meetingElapsedSeconds = 0
         activeMeetingSystemAudioCapturing = false
+        activeMeetingSystemAudioError = nil
 
         meetings.update(meetingID) { record in
             record.durationSeconds = duration
@@ -396,6 +405,7 @@ final class AppState: ObservableObject {
         activeMeetingID = nil
         meetingElapsedSeconds = 0
         activeMeetingSystemAudioCapturing = false
+        activeMeetingSystemAudioError = nil
 
         Task {
             await meetingRecorder.cancel()
@@ -413,6 +423,7 @@ final class AppState: ObservableObject {
             meetingTranscriptionTask = nil
             activeTranscriptionMeetingID = nil
             activeTranscriptionToken = nil
+            meetingTranscriptionProgress.removeValue(forKey: meetingID)
         }
         meetings.delete(meetingID)
     }
@@ -427,7 +438,7 @@ final class AppState: ObservableObject {
         guard let current = meetings.meeting(withID: meetingID) else { return }
         guard let micURL = meetings.audioFileURL(for: current) else {
             meetings.update(meetingID) { record in
-                record.status = .error("Аудиофайл mic.wav не найден.")
+                record.status = .error("Аудиофайл записи не найден.")
             }
             return
         }
@@ -444,6 +455,7 @@ final class AppState: ObservableObject {
         }
 
         let sysURL = meetings.sysAudioFileURL(for: current)
+        let expectedDuration = current.durationSeconds > 0 ? current.durationSeconds : nil
         let token = UUID()
         activeTranscriptionMeetingID = meetingID
         activeTranscriptionToken = token
@@ -455,6 +467,7 @@ final class AppState: ObservableObject {
                     self.activeTranscriptionMeetingID = nil
                     self.activeTranscriptionToken = nil
                     self.meetingTranscriptionTask = nil
+                    self.meetingTranscriptionProgress.removeValue(forKey: meetingID)
                 }
             }
 
@@ -463,6 +476,14 @@ final class AppState: ObservableObject {
                 record.progressSeconds = 0
                 record.transcriptionEngine = "gapi.uz"
             }
+            self.meetingTranscriptionProgress[meetingID] = MeetingTranscriptionProgress(
+                stage: .preparingAudio,
+                overallFraction: 0.01,
+                uploadPhaseEndFraction: 0.25,
+                uploadCompleted: false,
+                processedSeconds: 0,
+                totalSeconds: expectedDuration
+            )
 
             var uploadURL = micURL
             var stereoParties = false
@@ -497,13 +518,11 @@ final class AppState: ObservableObject {
                 let rawTranscription = try await client.transcribeMeeting(
                     fileURL: uploadURL,
                     stereoParties: stereoParties,
-                    enableSummary: self.settings.enableGapiSummary
-                ) { [weak self] progressSec in
+                    enableSummary: self.settings.enableGapiSummary,
+                    expectedDuration: expectedDuration
+                ) { [weak self] progress in
                     Task { @MainActor in
-                        guard let self, self.activeTranscriptionToken == token else { return }
-                        self.meetings.update(meetingID) { record in
-                            record.progressSeconds = progressSec
-                        }
+                        self?.applyTranscriptionProgress(progress, for: meetingID, token: token)
                     }
                 }
 
@@ -542,8 +561,13 @@ final class AppState: ObservableObject {
         guard let current = meetings.meeting(withID: meetingID) else { return }
         guard let micURL = meetings.audioFileURL(for: current) else {
             meetings.update(meetingID) { record in
-                record.status = .error("Аудиофайл mic.wav не найден.")
+                record.status = .error("Аудиофайл записи не найден.")
             }
+            return
+        }
+
+        if !settings.hasExternalWhisperServer {
+            transcribeMeetingUrgentGapi(meetingID)
             return
         }
 
@@ -560,15 +584,17 @@ final class AppState: ObservableObject {
         }
 
         let client = WhisperWindowsClient(baseURLString: settings.whisperServerURL)
+        let engineLabel = client.engineDisplayName
         let reachable = await client.isReachable(timeout: 2.5)
         guard reachable else {
             meetings.update(meetingID) { record in
-                record.status = .queued("Ожидает farrukh-pc в Tailscale (либо нажмите «Срочно через gapi.uz»)")
+                record.status = .queued("Сервер распознавания недоступен (либо отправьте через gapi.uz)")
             }
             return
         }
 
         let sysURL = meetings.sysAudioFileURL(for: current)
+        let expectedDuration = current.durationSeconds > 0 ? current.durationSeconds : nil
         let token = UUID()
         activeTranscriptionMeetingID = meetingID
         activeTranscriptionToken = token
@@ -580,25 +606,32 @@ final class AppState: ObservableObject {
                     self.activeTranscriptionMeetingID = nil
                     self.activeTranscriptionToken = nil
                     self.meetingTranscriptionTask = nil
+                    self.meetingTranscriptionProgress.removeValue(forKey: meetingID)
                 }
             }
 
             self.meetings.update(meetingID) { record in
                 record.status = .transcribing
                 record.progressSeconds = 0
-                record.transcriptionEngine = "farrukh-pc (Whisper large-v3-turbo)"
+                record.transcriptionEngine = engineLabel
             }
+            self.meetingTranscriptionProgress[meetingID] = MeetingTranscriptionProgress(
+                stage: .preparingAudio,
+                overallFraction: 0.01,
+                uploadPhaseEndFraction: 0.05,
+                uploadCompleted: false,
+                processedSeconds: 0,
+                totalSeconds: expectedDuration
+            )
 
             do {
                 let transcription = try await client.transcribeMeeting(
                     micURL: micURL,
-                    sysURL: sysURL
-                ) { [weak self] progressSec in
+                    sysURL: sysURL,
+                    expectedDuration: expectedDuration
+                ) { [weak self] progress in
                     Task { @MainActor in
-                        guard let self, self.activeTranscriptionToken == token else { return }
-                        self.meetings.update(meetingID) { record in
-                            record.progressSeconds = progressSec
-                        }
+                        self?.applyTranscriptionProgress(progress, for: meetingID, token: token)
                     }
                 }
 
@@ -609,7 +642,7 @@ final class AppState: ObservableObject {
                     record.segments = transcription.segments
                     record.languageCode = transcription.languageCode ?? "ru"
                     record.languageSummary = "Русский"
-                    record.transcriptionEngine = "farrukh-pc (Whisper large-v3-turbo)"
+                    record.transcriptionEngine = engineLabel
                     if let audioSec = transcription.audioSeconds, audioSec > 0 {
                         record.durationSeconds = audioSec
                     }
@@ -627,7 +660,7 @@ final class AppState: ObservableObject {
                 switch error {
                 case .serverUnavailable:
                     self.meetings.update(meetingID) { record in
-                        record.status = .queued("Связь с farrukh-pc прервалась — запись сохранена в очереди")
+                        record.status = .queued("Связь с сервером распознавания прервалась — запись сохранена в очереди")
                     }
                 default:
                     self.meetings.update(meetingID) { record in
@@ -637,7 +670,7 @@ final class AppState: ObservableObject {
             } catch is URLError {
                 guard !Task.isCancelled else { return }
                 self.meetings.update(meetingID) { record in
-                    record.status = .queued("Связь с farrukh-pc прервалась — запись сохранена в очереди")
+                    record.status = .queued("Связь с сервером распознавания прервалась — запись сохранена в очереди")
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -651,8 +684,29 @@ final class AppState: ObservableObject {
         await task.value
     }
 
+    private func applyTranscriptionProgress(
+        _ progress: MeetingTranscriptionProgress,
+        for meetingID: UUID,
+        token: UUID
+    ) {
+        guard activeTranscriptionToken == token else { return }
+        if let existing = meetingTranscriptionProgress[meetingID],
+           progress.overallFraction < existing.overallFraction {
+            return
+        }
+        meetingTranscriptionProgress[meetingID] = progress
+
+        let existingSaved = meetings.meeting(withID: meetingID)?.progressSeconds ?? 0
+        if progress.processedSeconds > 0, abs(progress.processedSeconds - existingSaved) >= 1.0 {
+            meetings.update(meetingID) { record in
+                record.progressSeconds = progress.processedSeconds
+            }
+        }
+    }
+
     func processQueuedMeetingsIfNeeded() async {
         guard activeTranscriptionMeetingID == nil else { return }
+        guard settings.hasExternalWhisperServer else { return }
         let queued = meetings.meetings.filter {
             if case .queued = $0.status { return true }
             return false
@@ -700,6 +754,9 @@ final class AppState: ObservableObject {
                 record.actionItems = generated.actionItems
             }
             record.status = .ready
+        }
+        if let updated = meetings.meeting(withID: meetingID) {
+            await meetings.sendExportWebhookIfNeeded(for: updated)
         }
     }
 }

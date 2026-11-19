@@ -62,7 +62,7 @@ enum MeetingStatus: Codable, Equatable {
         switch kind {
         case "recording": self = .recording
         case "queued":
-            let msg = (try? container.decode(String.self, forKey: .message)) ?? "Ожидает farrukh-pc в Tailscale"
+            let msg = (try? container.decode(String.self, forKey: .message)) ?? "Ожидает подключения сервера распознавания"
             self = .queued(msg)
         case "transcribing": self = .transcribing
         case "summarizing": self = .summarizing
@@ -116,6 +116,7 @@ struct MeetingRecord: Identifiable, Codable, Equatable {
     var sysAudioFileName: String? = nil
     var transcriptionEngine: String? = nil
     var obsidianFileName: String? = nil
+    var exportedFileName: String? = nil
     var status: MeetingStatus
     var progressSeconds: Double?
 
@@ -232,8 +233,9 @@ final class MeetingsStore: ObservableObject {
         mutate(&meetings[idx])
         var updated = meetings[idx]
         if updated.status == .ready || !updated.recapMarkdown.isEmpty {
-            if let exportedName = writeMarkdownFile(for: updated), exportedName != updated.obsidianFileName {
-                meetings[idx].obsidianFileName = exportedName
+            if let exportedName = writeMarkdownFile(for: updated),
+               exportedName != (updated.exportedFileName ?? updated.obsidianFileName) {
+                meetings[idx].exportedFileName = exportedName
                 updated = meetings[idx]
             }
         }
@@ -259,20 +261,26 @@ final class MeetingsStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
-    func obsidianExportFileURL(for meeting: MeetingRecord) -> URL? {
-        guard let folder = resolvedObsidianFolderURL() else { return nil }
-        let fileName = meeting.obsidianFileName ?? Self.makeObsidianFileName(for: meeting)
+    enum ExportDestination {
+        case none
+        case folder(URL)
+        case webhook(URL)
+    }
+
+    func exportedFileURL(for meeting: MeetingRecord) -> URL? {
+        guard case .folder(let folder) = Self.resolvedExportDestination() else { return nil }
+        let fileName = meeting.exportedFileName ?? meeting.obsidianFileName ?? Self.makeExportFileName(for: meeting)
         return folder.appendingPathComponent(fileName)
     }
 
-    func revealInObsidianFolder(_ meeting: MeetingRecord) {
+    func revealInExportFolder(_ meeting: MeetingRecord) {
         if let exportedName = writeMarkdownFile(for: meeting),
            let idx = meetings.firstIndex(where: { $0.id == meeting.id }),
-           meetings[idx].obsidianFileName != exportedName {
-            meetings[idx].obsidianFileName = exportedName
+           (meetings[idx].exportedFileName ?? meetings[idx].obsidianFileName) != exportedName {
+            meetings[idx].exportedFileName = exportedName
             save()
         }
-        if let url = obsidianExportFileURL(for: meeting),
+        if let url = exportedFileURL(for: meeting),
            FileManager.default.fileExists(atPath: url.path) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } else {
@@ -286,16 +294,18 @@ final class MeetingsStore: ObservableObject {
         let url = markdownFileURL(for: meeting.id)
         try? md.data(using: .utf8)?.write(to: url, options: .atomic)
 
+        let existingExported = meeting.exportedFileName ?? meeting.obsidianFileName
         guard meeting.status == .ready,
-              isAutoExportToObsidianEnabled(),
-              let folderURL = resolvedObsidianFolderURL() else {
-            return meeting.obsidianFileName
+              case .folder(let folderURL) = Self.resolvedExportDestination() else {
+            return existingExported
         }
 
-        let targetFileName = Self.makeObsidianFileName(for: meeting)
+        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+
+        let targetFileName = Self.makeExportFileName(for: meeting)
         let targetURL = folderURL.appendingPathComponent(targetFileName)
 
-        if let prevName = meeting.obsidianFileName,
+        if let prevName = existingExported,
            !prevName.isEmpty,
            prevName != targetFileName {
             let prevURL = folderURL.appendingPathComponent(prevName)
@@ -306,8 +316,39 @@ final class MeetingsStore: ObservableObject {
             try md.data(using: .utf8)?.write(to: targetURL, options: .atomic)
             return targetFileName
         } catch {
-            return meeting.obsidianFileName
+            return existingExported
         }
+    }
+
+    func sendExportWebhookIfNeeded(for meeting: MeetingRecord) async {
+        guard meeting.status == .ready,
+              case .webhook(let webhookURL) = Self.resolvedExportDestination() else {
+            return
+        }
+
+        let payload: [String: Any] = [
+            "id": meeting.id.uuidString,
+            "title": meeting.title,
+            "date": ISO8601DateFormatter().string(from: meeting.date),
+            "template": meeting.template.rawValue,
+            "durationSeconds": meeting.durationSeconds,
+            "recapMarkdown": meeting.recapMarkdown,
+            "markdown": fullExportMarkdown(for: meeting),
+            "actionItems": meeting.actionItems.map { item in
+                [
+                    "text": item.text,
+                    "completed": item.completed
+                ] as [String: Any]
+            }
+        ]
+
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        var request = URLRequest(url: webhookURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        _ = try? await URLSession.shared.data(for: request)
     }
 
     func fullExportMarkdown(for meeting: MeetingRecord) -> String {
@@ -382,22 +423,26 @@ final class MeetingsStore: ObservableObject {
         return parts.joined(separator: "\n")
     }
 
-    private func isAutoExportToObsidianEnabled() -> Bool {
-        UserDefaults.standard.object(forKey: "autoExportToObsidian") as? Bool ?? false
-    }
-
-    private func resolvedObsidianFolderURL() -> URL? {
-        let rawPath = (UserDefaults.standard.string(forKey: "obsidianRecapsFolder") ?? SettingsStore.defaultObsidianRecapsFolder)
+    static func resolvedExportDestination(from rawInput: String? = nil) -> ExportDestination {
+        let raw = (rawInput
+            ?? UserDefaults.standard.string(forKey: "exportDestination")
+            ?? UserDefaults.standard.string(forKey: "obsidianRecapsFolder")
+            ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !rawPath.isEmpty else { return nil }
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: rawPath, isDirectory: &isDir), isDir.boolValue {
-            return URL(fileURLWithPath: rawPath, isDirectory: true)
+        guard !raw.isEmpty else { return .none }
+
+        let lowered = raw.lowercased()
+        if (lowered.hasPrefix("http://") || lowered.hasPrefix("https://")),
+           let url = URL(string: raw),
+           url.host != nil {
+            return .webhook(url)
         }
-        return nil
+
+        let expanded = (raw as NSString).expandingTildeInPath
+        return .folder(URL(fileURLWithPath: expanded, isDirectory: true))
     }
 
-    static func makeObsidianFileName(for meeting: MeetingRecord) -> String {
+    static func makeExportFileName(for meeting: MeetingRecord) -> String {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.dateFormat = "yyyy-MM-dd_HH-mm"

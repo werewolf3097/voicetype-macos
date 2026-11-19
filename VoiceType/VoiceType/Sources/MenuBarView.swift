@@ -1,152 +1,327 @@
+import AppKit
 import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var windowBox = MenuBarWindowBox()
+
+    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+
+    private func dismissMenuBar() {
+        dismiss()
+        if let window = windowBox.window, window.isVisible {
+            window.close()
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            statusLine
+        VStack(alignment: .leading, spacing: 8) {
+            statusHeader
 
             if case .error(let message) = appState.status {
-                Text(message)
+                Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(theme.danger)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
             if !appState.hotkeyActive || !appState.microphoneAuthorized || (settings.autoPaste && !appState.accessibilityAuthorized) {
                 permissionWarning
             }
 
-            Divider()
-
-            if settings.recordingMode == .toggle {
-                Text("Нажмите \(settings.hotkey.rawValue) для старта и ещё раз для стопа.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Зажмите \(settings.hotkey.rawValue), говорите, отпустите.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider()
+            Divider().overlay(theme.border)
 
             if appState.activeMeetingID != nil {
-                HStack {
-                    Circle().fill(Color.red).frame(width: 8, height: 8)
-                    Text("Встреча: \(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))")
-                        .font(.caption.monospacedDigit())
-                }
-                Button("Завершить встречу и создать рекап") {
-                    appState.finishMeeting()
-                    DashboardWindowController.shared.show(section: .meetings)
-                }
-                Button("Открыть блокнот встречи…") {
-                    DashboardWindowController.shared.show(section: .meetings)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(theme.danger)
+                            .frame(width: 7, height: 7)
+                        Text("Запись встречи")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(theme.danger)
+                        Spacer()
+                        Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
+                            .font(.caption.monospacedDigit().weight(.medium))
+                            .foregroundStyle(theme.secondaryInk)
+                    }
+
+                    Button {
+                        dismissMenuBar()
+                        appState.finishMeeting()
+                        DashboardWindowController.shared.show(section: .meetings)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "stop.circle.fill")
+                            Text("Завершить и создать рекап")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
+
+                    ClaudeMenuRowButton("Открыть блокнот встречи…", systemImage: "note.text") {
+                        dismissMenuBar()
+                        DashboardWindowController.shared.show(section: .meetings)
+                    }
                 }
             } else {
-                Button("Начать запись встречи (Granola)…") {
-                    _ = appState.startMeeting(
+                Button {
+                    dismissMenuBar()
+                    if let id = appState.startMeeting(
                         template: .general,
                         audioSource: settings.meetingAudioSource
-                    )
+                    ) {
+                        appState.selectedMeetingID = id
+                    }
+                    DashboardWindowController.shared.show(section: .meetings)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Начать запись встречи")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+            }
+
+            Divider().overlay(theme.border)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ClaudeMenuRowButton("Открыть VoiceType", systemImage: "macwindow") {
+                    dismissMenuBar()
+                    DashboardWindowController.shared.show(section: .home)
+                }
+
+                ClaudeMenuRowButton("Встречи и рекапы…", systemImage: "person.2.wave.2") {
+                    dismissMenuBar()
                     DashboardWindowController.shared.show(section: .meetings)
                 }
+
+                ClaudeMenuRowButton("Настройки…", systemImage: "gearshape", shortcut: "⌘,") {
+                    dismissMenuBar()
+                    DashboardWindowController.shared.show(section: .settings)
+                }
+                .keyboardShortcut(",", modifiers: .command)
             }
 
-            Divider()
+            Divider().overlay(theme.border)
 
-            Button("Открыть VoiceType") {
-                DashboardWindowController.shared.show(section: .home)
-            }
-
-            Button("Встречи и рекапы…") {
-                DashboardWindowController.shared.show(section: .meetings)
-            }
-
-            Button("Настройки…") {
-                DashboardWindowController.shared.show(section: .settings)
-            }
-            .keyboardShortcut(",", modifiers: .command)
-
-            Button("Выйти") {
+            ClaudeMenuRowButton("Выйти из VoiceType", systemImage: "power", shortcut: "⌘Q") {
+                dismissMenuBar()
                 NSApp.terminate(nil)
             }
+            .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(12)
-        .frame(width: 260)
+        .padding(10)
+        .frame(width: 280)
+        .background(theme.canvas)
+        .background(MenuBarWindowAccessor(box: windowBox))
+        .tint(theme.accent)
         .preferredColorScheme(settings.appearance.colorScheme)
         .onAppear { appState.refreshPermissionsAndHotkey() }
     }
 
+    private var statusHeader: some View {
+        HStack(spacing: 10) {
+            statusIcon
+                .font(.title3)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(statusTitle)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(theme.ink)
+                Text(hotkeyHint)
+                    .font(.caption2)
+                    .foregroundStyle(theme.secondaryInk)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+
+    private var hotkeyHint: String {
+        settings.recordingMode == .toggle
+            ? "\(settings.hotkey.rawValue) · старт/стоп"
+            : "\(settings.hotkey.rawValue) · удержание"
+    }
+
     @ViewBuilder
-    private var statusLine: some View {
+    private var statusIcon: some View {
         switch appState.status {
         case .idle:
-            Label("Готов", systemImage: "mic")
+            Image(systemName: "mic.circle.fill")
+                .foregroundStyle(theme.accent)
         case .recording:
-            Label("Запись…", systemImage: "mic.fill").foregroundStyle(.red)
-        case .transcribing:
-            Label("Распознавание…", systemImage: "waveform")
-        case .cleaning:
-            Label("Обработка текста…", systemImage: "wand.and.stars")
+            Image(systemName: "waveform.circle.fill")
+                .symbolEffect(.variableColor.iterative, isActive: true)
+                .foregroundStyle(theme.danger)
+        case .transcribing, .cleaning:
+            Image(systemName: "waveform.circle.fill")
+                .symbolEffect(.pulse, isActive: true)
+                .foregroundStyle(theme.accent)
         case .error:
-            Label("Ошибка", systemImage: "exclamationmark.triangle")
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(theme.warning)
+        }
+    }
+
+    private var statusTitle: String {
+        switch appState.status {
+        case .idle: return "Готов к диктовке"
+        case .recording: return "Идёт запись…"
+        case .transcribing: return "Распознавание…"
+        case .cleaning: return "Обработка текста…"
+        case .error: return "Ошибка"
         }
     }
 
     @ViewBuilder
     private var permissionWarning: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             if !appState.hotkeyActive {
                 if appState.inputMonitoringAuthorized {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Мониторинг ввода: нужен перезапуск.")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                        Button("Перезапустить VoiceType") {
-                            PermissionsHelper.relaunchApp()
-                        }
-                        .font(.caption)
+                    permissionAction("Мониторинг ввода: нужен перезапуск", buttonTitle: "Перезапустить") {
+                        dismissMenuBar()
+                        PermissionsHelper.relaunchApp()
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Нет доступа к чтению клавиш (хоткей).")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                        Button("Разрешить «Мониторинг ввода»") {
-                            PermissionsHelper.openInputMonitoringSettings()
-                        }
-                        .font(.caption)
+                    permissionAction("Нет доступа к «Мониторингу ввода»", buttonTitle: "Разрешить") {
+                        dismissMenuBar()
+                        PermissionsHelper.openInputMonitoringSettings()
                     }
                 }
             }
 
             if !appState.microphoneAuthorized {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Нет доступа к микрофону.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                    Button("Разрешить «Микрофон»") {
-                        PermissionsHelper.openMicrophoneSettings()
-                    }
-                    .font(.caption)
+                permissionAction("Нет доступа к микрофону", buttonTitle: "Разрешить") {
+                    dismissMenuBar()
+                    PermissionsHelper.openMicrophoneSettings()
                 }
             }
 
             if settings.autoPaste && !appState.accessibilityAuthorized {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Нет доступа к Accessibility (автовставка).")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                    Button("Разрешить «Accessibility»") {
-                        PermissionsHelper.openAccessibilitySettings()
-                    }
-                    .font(.caption)
+                permissionAction("Нет доступа к Accessibility", buttonTitle: "Разрешить") {
+                    dismissMenuBar()
+                    PermissionsHelper.openAccessibilitySettings()
                 }
             }
         }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func permissionAction(_ title: String, buttonTitle: String, action: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(theme.warning)
+                .lineLimit(2)
+            Spacer()
+            Button(buttonTitle, action: action)
+                .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+        }
+    }
+}
+
+private final class MenuBarWindowBox {
+    weak var window: NSWindow?
+}
+
+private struct MenuBarWindowAccessor: NSViewRepresentable {
+    let box: MenuBarWindowBox
+
+    func makeNSView(context: Context) -> WindowObserverView {
+        let view = WindowObserverView()
+        view.onWindowChange = { [box] window in
+            if let window {
+                box.window = window
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: WindowObserverView, context: Context) {
+        if let window = nsView.window, box.window !== window {
+            box.window = window
+        }
+    }
+
+    final class WindowObserverView: NSView {
+        var onWindowChange: ((NSWindow?) -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            onWindowChange?(window)
+        }
+    }
+}
+
+private struct ClaudeMenuRowButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let title: String
+    let systemImage: String
+    let shortcut: String?
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    init(_ title: String, systemImage: String, shortcut: String? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.shortcut = shortcut
+        self.action = action
+    }
+
+    var body: some View {
+        let theme = ClaudeTheme(scheme: colorScheme)
+        Button {
+            isHovered = false
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .frame(width: 16)
+                    .foregroundStyle(isHovered ? theme.ink : theme.secondaryInk)
+                Text(title)
+                    .font(.callout)
+                    .foregroundStyle(theme.ink)
+                Spacer()
+                if let shortcut {
+                    Text(shortcut)
+                        .font(.caption)
+                        .foregroundStyle(isHovered ? theme.secondaryInk : theme.tertiaryInk)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHovered ? theme.hoverFill : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(isHovered ? theme.border : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.1), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .onDisappear { isHovered = false }
     }
 }

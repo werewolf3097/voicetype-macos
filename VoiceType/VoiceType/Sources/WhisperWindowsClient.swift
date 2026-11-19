@@ -12,23 +12,29 @@ enum WhisperWindowsError: Error, LocalizedError {
         case .invalidURL(let url):
             return "Некорректный адрес Whisper-сервера: \(url)"
         case .serverUnavailable(let msg):
-            return "farrukh-pc недоступен: \(msg)"
+            return "Сервер распознавания недоступен: \(msg)"
         case .unreadableAudio(let msg):
             return "Не удалось прочитать аудиофайл: \(msg)"
         case .serverError(let code, let body):
-            return "Whisper-сервер вернул ошибку \(code): \(body)"
+            return "Сервер распознавания вернул ошибку \(code): \(body)"
         }
     }
 }
 
 struct WhisperWindowsClient: Sendable {
-    static let defaultURLString = "http://100.98.178.46:8178"
     static let defaultVocabularyPrompt = "Korzinka, Yango, SuperApp, SuperPortal, EPAM, Brander, Omni, SAP, CIAM, CDP, CVM, Atlant, Lokalise, 2GIS, OpenMaps, De Factum, Tez, Uzum, Infinbank"
 
     private let baseURLString: String
 
-    init(baseURLString: String = Self.defaultURLString) {
+    init(baseURLString: String = "") {
         self.baseURLString = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var engineDisplayName: String {
+        if let host = (try? resolvedBaseURL())?.host, !host.isEmpty {
+            return "Whisper (\(host))"
+        }
+        return "Внешний сервер"
     }
 
     private func resolvedBaseURL() throws -> URL {
@@ -59,14 +65,29 @@ struct WhisperWindowsClient: Sendable {
         }
     }
 
+    private static let preparationBarShare: Double = 0.05
+
     func transcribeMeeting(
         micURL: URL,
         sysURL: URL?,
         customTerms: [String] = [],
-        onProgress: (@Sendable (Double) -> Void)? = nil
+        expectedDuration: Double? = nil,
+        onProgress: (@Sendable (MeetingTranscriptionProgress) -> Void)? = nil
     ) async throws -> GapiTranscription {
         let baseURL = try resolvedBaseURL()
         let prompt = Self.buildPrompt(customTerms: customTerms)
+        let prepWeight = Self.preparationBarShare
+
+        onProgress?(
+            MeetingTranscriptionProgress(
+                stage: .preparingAudio,
+                overallFraction: 0.02,
+                uploadPhaseEndFraction: prepWeight,
+                uploadCompleted: false,
+                processedSeconds: 0,
+                totalSeconds: expectedDuration
+            )
+        )
 
         let micScan = try await Task.detached(priority: .userInitiated) {
             try Self.analyzeSpeechSlices(fileURL: micURL)
@@ -81,46 +102,95 @@ struct WhisperWindowsClient: Sendable {
             sysScan = nil
         }
 
-        let meetingDuration = max(micScan.totalDurationSeconds, sysScan?.totalDurationSeconds ?? 0)
+        let meetingDuration = max(micScan.totalDurationSeconds, sysScan?.totalDurationSeconds ?? 0, expectedDuration ?? 0)
+        let totalDurationOpt: Double? = meetingDuration > 0 ? meetingDuration : nil
         let totalSpeechWork = max(1.0, micScan.totalSpeechDuration + (sysScan?.totalSpeechDuration ?? 0))
         var completedSpeechWork = 0.0
 
-        var allSegments: [GapiTranscription.Segment] = []
-
-        for slice in micScan.slices {
-            try Task.checkCancellation()
-            let sliceSegments = try await transcribeSlice(
-                sourceURL: micURL,
-                slice: slice,
-                speaker: 0,
-                baseURL: baseURL,
-                prompt: prompt
-            )
-            allSegments.append(contentsOf: sliceSegments)
-            completedSpeechWork += slice.durationSeconds
-            if meetingDuration > 0 {
-                let ratio = min(1.0, completedSpeechWork / totalSpeechWork)
-                onProgress?(ratio * meetingDuration)
-            }
+        var workItems: [(sourceURL: URL, slice: SpeechSlice, speaker: Int)] = micScan.slices.map {
+            (sourceURL: micURL, slice: $0, speaker: 0)
+        }
+        if let sysURL, let sysScan {
+            workItems.append(contentsOf: sysScan.slices.map {
+                (sourceURL: sysURL, slice: $0, speaker: 1)
+            })
         }
 
-        if let sysURL, let sysScan {
-            for slice in sysScan.slices {
-                try Task.checkCancellation()
-                let sliceSegments = try await transcribeSlice(
-                    sourceURL: sysURL,
-                    slice: slice,
-                    speaker: 1,
-                    baseURL: baseURL,
-                    prompt: prompt
-                )
-                allSegments.append(contentsOf: sliceSegments)
-                completedSpeechWork += slice.durationSeconds
-                if meetingDuration > 0 {
-                    let ratio = min(1.0, completedSpeechWork / totalSpeechWork)
-                    onProgress?(ratio * meetingDuration)
+        let totalChunks = workItems.count
+        var allSegments: [GapiTranscription.Segment] = []
+
+        for (index, item) in workItems.enumerated() {
+            try Task.checkCancellation()
+            let chunkIndex = index + 1
+            let sliceBaseRatio = completedSpeechWork / totalSpeechWork
+            let sliceSpanRatio = item.slice.durationSeconds / totalSpeechWork
+            let processedBefore = meetingDuration > 0 ? sliceBaseRatio * meetingDuration : completedSpeechWork
+
+            let sliceSegments = try await transcribeSlice(
+                sourceURL: item.sourceURL,
+                slice: item.slice,
+                speaker: item.speaker,
+                baseURL: baseURL,
+                prompt: prompt
+            ) { sent, expected, isUploadDone in
+                if isUploadDone {
+                    let overall = prepWeight + (1.0 - prepWeight) * (sliceBaseRatio + sliceSpanRatio * 0.15)
+                    onProgress?(
+                        MeetingTranscriptionProgress(
+                            stage: .transcribing(
+                                processedSeconds: processedBefore,
+                                totalSeconds: totalDurationOpt,
+                                chunkIndex: chunkIndex,
+                                totalChunks: totalChunks
+                            ),
+                            overallFraction: overall,
+                            uploadPhaseEndFraction: prepWeight,
+                            uploadCompleted: true,
+                            processedSeconds: processedBefore,
+                            totalSeconds: totalDurationOpt
+                        )
+                    )
+                } else {
+                    let uploadRatio = expected > 0 ? min(1.0, Double(sent) / Double(expected)) : 0
+                    let overall = prepWeight + (1.0 - prepWeight) * (sliceBaseRatio + sliceSpanRatio * 0.15 * uploadRatio)
+                    onProgress?(
+                        MeetingTranscriptionProgress(
+                            stage: .uploading(
+                                bytesSent: sent,
+                                totalBytes: expected,
+                                chunkIndex: chunkIndex,
+                                totalChunks: totalChunks
+                            ),
+                            overallFraction: overall,
+                            uploadPhaseEndFraction: prepWeight,
+                            uploadCompleted: false,
+                            processedSeconds: processedBefore,
+                            totalSeconds: totalDurationOpt
+                        )
+                    )
                 }
             }
+
+            allSegments.append(contentsOf: sliceSegments)
+            completedSpeechWork += item.slice.durationSeconds
+            let newRatio = min(1.0, completedSpeechWork / totalSpeechWork)
+            let newProcessed = meetingDuration > 0 ? newRatio * meetingDuration : completedSpeechWork
+            let overall = prepWeight + (1.0 - prepWeight) * newRatio
+            onProgress?(
+                MeetingTranscriptionProgress(
+                    stage: .transcribing(
+                        processedSeconds: newProcessed,
+                        totalSeconds: totalDurationOpt,
+                        chunkIndex: chunkIndex,
+                        totalChunks: totalChunks
+                    ),
+                    overallFraction: overall,
+                    uploadPhaseEndFraction: prepWeight,
+                    uploadCompleted: true,
+                    processedSeconds: newProcessed,
+                    totalSeconds: totalDurationOpt
+                )
+            )
         }
 
         let merged = Self.mergeAndCleanSegments(allSegments)
@@ -382,7 +452,8 @@ struct WhisperWindowsClient: Sendable {
         slice: SpeechSlice,
         speaker: Int,
         baseURL: URL,
-        prompt: String
+        prompt: String,
+        onUploadProgress: (@Sendable (Int64, Int64, Bool) -> Void)? = nil
     ) async throws -> [GapiTranscription.Segment] {
         let tempURL = try await Task.detached(priority: .userInitiated) {
             try Self.exportSliceToTempWAV(sourceURL: sourceURL, slice: slice)
@@ -397,16 +468,24 @@ struct WhisperWindowsClient: Sendable {
             boundary: boundary,
             prompt: prompt
         )
+        let bodySize = Int64(body.count)
 
         var request = URLRequest(url: baseURL.appendingPathComponent("inference"))
         request.httpMethod = "POST"
         request.timeoutInterval = max(90.0, slice.durationSeconds * 2.5 + 45.0)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
+
+        onUploadProgress?(0, bodySize, false)
+
+        let delegate = UploadProgressDelegate(fallbackTotalBytes: bodySize) { sent, expected, isDone in
+            onUploadProgress?(sent, expected, isDone)
+        }
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await URLSession.shared.upload(for: request, from: body, delegate: delegate)
+        } catch let error as URLError where error.code == .cancelled {
+            throw error
         } catch let error as URLError {
             throw WhisperWindowsError.serverUnavailable(error.localizedDescription)
         }

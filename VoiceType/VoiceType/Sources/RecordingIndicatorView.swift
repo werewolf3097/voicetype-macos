@@ -1,36 +1,43 @@
 import SwiftUI
 
 struct RecordingIndicatorView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let status: RecordingStatus
 
     var body: some View {
+        let theme = ClaudeTheme(scheme: colorScheme)
         HStack(spacing: 10) {
-            icon
+            icon(theme: theme)
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(theme.ink)
                 .lineLimit(1)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.black.opacity(0.85), in: Capsule())
+        .padding(.vertical, 10)
+        .background(theme.surface.opacity(0.96), in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(theme.border, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.16), radius: 12, y: 4)
         .fixedSize()
     }
 
     @ViewBuilder
-    private var icon: some View {
+    private func icon(theme: ClaudeTheme) -> some View {
         switch status {
         case .recording:
             Image(systemName: "waveform")
                 .symbolEffect(.variableColor.iterative, isActive: true)
-                .foregroundStyle(.red)
+                .foregroundStyle(theme.danger)
         case .transcribing, .cleaning:
             ProgressView()
                 .controlSize(.small)
-                .tint(.white)
+                .tint(theme.accent)
         case .error:
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(theme.warning)
         case .idle:
             EmptyView()
         }

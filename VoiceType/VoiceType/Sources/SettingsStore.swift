@@ -108,11 +108,8 @@ final class SettingsStore: ObservableObject {
     @Published var whisperServerURL: String {
         didSet { UserDefaults.standard.set(whisperServerURL, forKey: "whisperServerURL") }
     }
-    @Published var obsidianRecapsFolder: String {
-        didSet { UserDefaults.standard.set(obsidianRecapsFolder, forKey: "obsidianRecapsFolder") }
-    }
-    @Published var autoExportToObsidian: Bool {
-        didSet { UserDefaults.standard.set(autoExportToObsidian, forKey: "autoExportToObsidian") }
+    @Published var exportDestination: String {
+        didSet { UserDefaults.standard.set(exportDestination, forKey: "exportDestination") }
     }
 
     @Published var gapiToken: String {
@@ -122,7 +119,13 @@ final class SettingsStore: ObservableObject {
         didSet { KeychainStore.set(anthropicApiKey, forKey: "anthropicApiKey") }
     }
 
-    static let defaultObsidianRecapsFolder = "/Users/farrukh/Library/Mobile Documents/iCloud~md~obsidian/Documents/Рекапы встреч"
+    var hasExternalWhisperServer: Bool {
+        !whisperServerURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasExportDestination: Bool {
+        !exportDestination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -136,9 +139,10 @@ final class SettingsStore: ObservableObject {
         self.meetingAudioSource = MeetingAudioSource(rawValue: defaults.string(forKey: "meetingAudioSource") ?? "") ?? .micAndSystem
         self.enableGapiSummary = defaults.object(forKey: "enableGapiSummary") as? Bool ?? false
         self.keepMeetingAudio = defaults.object(forKey: "keepMeetingAudio") as? Bool ?? false
-        self.whisperServerURL = defaults.string(forKey: "whisperServerURL") ?? WhisperWindowsClient.defaultURLString
-        self.obsidianRecapsFolder = defaults.string(forKey: "obsidianRecapsFolder") ?? Self.defaultObsidianRecapsFolder
-        self.autoExportToObsidian = defaults.object(forKey: "autoExportToObsidian") as? Bool ?? false
+        self.whisperServerURL = defaults.string(forKey: "whisperServerURL") ?? ""
+        self.exportDestination = defaults.string(forKey: "exportDestination")
+            ?? defaults.string(forKey: "obsidianRecapsFolder")
+            ?? ""
         self.gapiToken = KeychainStore.get("gapiToken") ?? ""
         self.anthropicApiKey = KeychainStore.get("anthropicApiKey") ?? ""
         DockIconController.apply(visible: self.showDockIcon)
