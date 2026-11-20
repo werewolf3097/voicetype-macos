@@ -24,11 +24,131 @@ enum DashboardSection: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
-    @EnvironmentObject var meetingsStore: MeetingsStore
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var sidebarVisible = true
     @State private var userToggledSidebar = false
+
+    private static let sidebarWidth: CGFloat = 222
+    private static let collapsedTopBarHeight: CGFloat = 44
+
+    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+
+    private var currentSection: DashboardSection {
+        appState.selectedSection ?? .home
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ClaudeSidebarView(
+                isVisible: sidebarVisible,
+                onCollapse: {
+                    userToggledSidebar = true
+                    setSidebarVisible(false)
+                }
+            )
+            .frame(width: Self.sidebarWidth)
+            .frame(width: sidebarVisible ? Self.sidebarWidth : 0, alignment: .trailing)
+            .clipped()
+            .allowsHitTesting(sidebarVisible)
+            .accessibilityHidden(!sidebarVisible)
+
+            VStack(spacing: 0) {
+                CollapsedTopBarView(
+                    currentSection: currentSection,
+                    onExpand: {
+                        userToggledSidebar = false
+                        setSidebarVisible(true)
+                    }
+                )
+                .frame(height: Self.collapsedTopBarHeight)
+                .frame(height: sidebarVisible ? 0 : Self.collapsedTopBarHeight, alignment: .bottom)
+                .opacity(sidebarVisible ? 0 : 1)
+                .clipped()
+                .allowsHitTesting(!sidebarVisible)
+                .accessibilityHidden(sidebarVisible)
+
+                DashboardDetailHostView(section: currentSection)
+                    .equatable()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .background(theme.canvas)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onChange(of: geo.size.width) { _, newWidth in
+                        let threshold: CGFloat = currentSection == .meetings ? 940 : 780
+                        if newWidth < threshold && sidebarVisible && !userToggledSidebar {
+                            setSidebarVisible(false)
+                        } else if newWidth >= threshold + 60 && !sidebarVisible && !userToggledSidebar {
+                            setSidebarVisible(true)
+                        }
+                    }
+            }
+        )
+        .frame(minWidth: 740, minHeight: 540)
+        .background(theme.canvas)
+        .preferredColorScheme(settings.appearance.colorScheme)
+        .onChange(of: settings.appearance) { _, mode in
+            DashboardWindowController.shared.applyAppearance(mode)
+        }
+        .onAppear {
+            if PermissionsHelper.microphoneStatus() == .notDetermined {
+                PermissionsHelper.requestMicrophone { _ in
+                    appState.refreshPermissionsAndHotkey()
+                }
+            } else {
+                appState.refreshPermissionsAndHotkey()
+            }
+        }
+    }
+
+    private func setSidebarVisible(_ visible: Bool) {
+        guard sidebarVisible != visible else { return }
+        withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
+            sidebarVisible = visible
+        }
+    }
+}
+
+// MARK: - Isolated Detail Host
+
+private struct DashboardDetailHostView: View, Equatable {
+    let section: DashboardSection
+
+    static func == (lhs: DashboardDetailHostView, rhs: DashboardDetailHostView) -> Bool {
+        lhs.section == rhs.section
+    }
+
+    var body: some View {
+        switch section {
+        case .home:
+            DashboardHomeView()
+        case .meetings:
+            DashboardMeetingsView()
+        case .history:
+            DashboardHistoryView()
+        case .dictionary:
+            DashboardDictionaryView()
+        case .settings:
+            DashboardSettingsView()
+        }
+    }
+}
+
+// MARK: - Claude-Style Sidebar
+
+private struct ClaudeSidebarView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var meetingsStore: MeetingsStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    let isVisible: Bool
+    let onCollapse: () -> Void
+
     @State private var hoveredSection: DashboardSection?
     @State private var hoveredMeetingID: UUID?
 
@@ -50,49 +170,6 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            HStack(spacing: 0) {
-                if sidebarVisible {
-                    claudeSidebar
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                }
-
-                mainCanvas
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onChange(of: geo.size.width) { _, newWidth in
-                let threshold: CGFloat = currentSection == .meetings ? 940 : 780
-                if newWidth < threshold && sidebarVisible && !userToggledSidebar {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        sidebarVisible = false
-                    }
-                } else if newWidth >= threshold + 60 && !sidebarVisible && !userToggledSidebar {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        sidebarVisible = true
-                    }
-                }
-            }
-        }
-        .frame(minWidth: 740, minHeight: 540)
-        .background(theme.canvas)
-        .preferredColorScheme(settings.appearance.colorScheme)
-        .onChange(of: settings.appearance) { _, mode in
-            DashboardWindowController.shared.applyAppearance(mode)
-        }
-        .onAppear {
-            if PermissionsHelper.microphoneStatus() == .notDetermined {
-                PermissionsHelper.requestMicrophone { _ in
-                    appState.refreshPermissionsAndHotkey()
-                }
-            } else {
-                appState.refreshPermissionsAndHotkey()
-            }
-        }
-    }
-
-    // MARK: - Claude-Style Sidebar
-
-    private var claudeSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Primary Claude-style "+ New" CTA + sidebar collapse button
             HStack(spacing: 8) {
@@ -103,7 +180,7 @@ struct SettingsView: View {
                     } label: {
                         HStack(spacing: 7) {
                             Image(systemName: "waveform")
-                                .symbolEffect(.variableColor.iterative, isActive: true)
+                                .symbolEffect(.variableColor.iterative, isActive: isVisible)
                             Text("Запись")
                                 .font(.callout.weight(.semibold))
                                 .lineLimit(1)
@@ -148,12 +225,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                 }
 
-                Button {
-                    userToggledSidebar = true
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        sidebarVisible = false
-                    }
-                } label: {
+                Button(action: onCollapse) {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(theme.secondaryInk)
@@ -232,7 +304,6 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .padding(10)
         }
-        .frame(width: 222)
         .frame(maxHeight: .infinity)
         .background(theme.sidebar)
         .overlay(alignment: .trailing) {
@@ -339,117 +410,102 @@ struct SettingsView: View {
         case .error: return "Ошибка"
         }
     }
+}
 
-    // MARK: - Main Canvas
+// MARK: - Collapsed Top Bar
 
-    private var mainCanvas: some View {
-        VStack(spacing: 0) {
-            if !sidebarVisible {
-                HStack(spacing: 10) {
+private struct CollapsedTopBarView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: SettingsStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    let currentSection: DashboardSection
+    let onExpand: () -> Void
+
+    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onExpand) {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(theme.secondaryInk)
+                    .frame(width: 28, height: 28)
+                    .background(theme.hoverFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help("Показать боковую панель")
+
+            Menu {
+                ForEach(DashboardSection.allCases) { section in
                     Button {
-                        userToggledSidebar = false
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            sidebarVisible = true
-                        }
+                        appState.selectedSection = section
                     } label: {
-                        Image(systemName: "sidebar.left")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(theme.secondaryInk)
-                            .frame(width: 28, height: 28)
-                            .background(theme.hoverFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Показать боковую панель")
-
-                    Menu {
-                        ForEach(DashboardSection.allCases) { section in
-                            Button {
-                                appState.selectedSection = section
-                            } label: {
-                                Label(section.rawValue, systemImage: section.systemImage)
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: currentSection.systemImage)
-                                .foregroundStyle(theme.secondaryInk)
-                            Text(currentSection.rawValue)
-                                .font(.callout.weight(.semibold))
-                                .foregroundStyle(theme.ink)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(theme.secondaryInk)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(theme.border, lineWidth: 1)
-                        )
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-
-                    Spacer()
-
-                    if appState.activeMeetingID == nil {
-                        Button {
-                            if let id = appState.startMeeting(
-                                template: .general,
-                                audioSource: settings.meetingAudioSource
-                            ) {
-                                appState.selectedMeetingID = id
-                                appState.selectedSection = .meetings
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "plus")
-                                Text("Новая встреча")
-                            }
-                        }
-                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
-                    } else {
-                        Button {
-                            appState.selectedMeetingID = appState.activeMeetingID
-                            appState.selectedSection = .meetings
-                        } label: {
-                            HStack(spacing: 5) {
-                                Circle().fill(Color.white).frame(width: 6, height: 6)
-                                Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
-                                    .monospacedDigit()
-                            }
-                        }
-                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
+                        Label(section.rawValue, systemImage: section.systemImage)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(theme.sidebar.opacity(0.6))
-
-                Divider().overlay(theme.border)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: currentSection.systemImage)
+                        .foregroundStyle(theme.secondaryInk)
+                    Text(currentSection.rawValue)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(theme.ink)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(theme.secondaryInk)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(theme.border, lineWidth: 1)
+                )
             }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
 
-            detailView
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Spacer()
+
+            if appState.activeMeetingID == nil {
+                Button {
+                    if let id = appState.startMeeting(
+                        template: .general,
+                        audioSource: settings.meetingAudioSource
+                    ) {
+                        appState.selectedMeetingID = id
+                        appState.selectedSection = .meetings
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus")
+                        Text("Новая встреча")
+                    }
+                }
+                .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+            } else {
+                Button {
+                    appState.selectedMeetingID = appState.activeMeetingID
+                    appState.selectedSection = .meetings
+                } label: {
+                    HStack(spacing: 5) {
+                        Circle().fill(Color.white).frame(width: 6, height: 6)
+                        Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
+                            .monospacedDigit()
+                    }
+                }
+                .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
+            }
         }
-        .background(theme.canvas)
-    }
-
-    @ViewBuilder
-    private var detailView: some View {
-        switch currentSection {
-        case .home:
-            DashboardHomeView()
-        case .meetings:
-            DashboardMeetingsView()
-        case .history:
-            DashboardHistoryView()
-        case .dictionary:
-            DashboardDictionaryView()
-        case .settings:
-            DashboardSettingsView()
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(theme.sidebar.opacity(0.6))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(theme.border)
+                .frame(height: 1)
         }
     }
 }

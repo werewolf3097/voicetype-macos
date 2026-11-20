@@ -17,6 +17,9 @@ struct DashboardMeetingsView: View {
     @State private var meetingPendingDelete: MeetingRecord?
     @State private var hoveredMeetingID: UUID?
     @State private var showMeetingsList: Bool = true
+    @State private var meetingsListWidth: CGFloat = 248
+    @State private var dragStartListWidth: CGFloat? = nil
+    @State private var isHoveringDivider: Bool = false
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
 
@@ -50,11 +53,17 @@ struct DashboardMeetingsView: View {
     }
 
     var body: some View {
-        HSplitView {
-            if showMeetingsList {
-                meetingsListColumn
-                    .frame(minWidth: 215, idealWidth: 248, maxWidth: 300)
-            }
+        HStack(spacing: 0) {
+            meetingsListColumn
+                .frame(width: meetingsListWidth)
+                .frame(width: showMeetingsList ? meetingsListWidth : 0, alignment: .trailing)
+                .clipped()
+                .allowsHitTesting(showMeetingsList)
+
+            meetingsListDivider
+                .frame(width: showMeetingsList ? 1 : 0)
+                .opacity(showMeetingsList ? 1 : 0)
+                .allowsHitTesting(showMeetingsList)
 
             detailPane
                 .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
@@ -96,6 +105,45 @@ struct DashboardMeetingsView: View {
     }
 
     // MARK: - Meetings List Column
+
+    private var meetingsListDivider: some View {
+        Rectangle()
+            .fill(theme.border)
+            .frame(width: 1)
+            .overlay(
+                Color.clear
+                    .frame(width: 7)
+                    .contentShape(Rectangle())
+                    .onHover { hovering in
+                        if hovering && !isHoveringDivider {
+                            isHoveringDivider = true
+                            NSCursor.resizeLeftRight.push()
+                        } else if !hovering && isHoveringDivider {
+                            isHoveringDivider = false
+                            NSCursor.pop()
+                        }
+                    }
+                    .onDisappear {
+                        if isHoveringDivider {
+                            isHoveringDivider = false
+                            NSCursor.pop()
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { value in
+                                let base = dragStartListWidth ?? meetingsListWidth
+                                if dragStartListWidth == nil {
+                                    dragStartListWidth = base
+                                }
+                                meetingsListWidth = min(320, max(215, base + value.translation.width))
+                            }
+                            .onEnded { _ in
+                                dragStartListWidth = nil
+                            }
+                    )
+            )
+    }
 
     private var meetingsListColumn: some View {
         VStack(spacing: 0) {
@@ -251,7 +299,7 @@ struct DashboardMeetingsView: View {
             Button("Показать recap.md в Finder") {
                 meetingsStore.revealMarkdownInFinder(meeting)
             }
-            if meetingsStore.audioFileURL(for: meeting) != nil {
+            if meeting.audioFileName != nil {
                 Button("Показать аудио в Finder") {
                     meetingsStore.revealAudioInFinder(meeting)
                 }

@@ -172,13 +172,17 @@ final class MeetingsStore: ObservableObject {
 
     func audioFileURL(for meeting: MeetingRecord) -> URL? {
         guard let name = meeting.audioFileName else { return nil }
-        let url = folderURL(for: meeting.id).appendingPathComponent(name)
+        let url = baseDirectory
+            .appendingPathComponent(meeting.id.uuidString, isDirectory: true)
+            .appendingPathComponent(name)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     func sysAudioFileURL(for meeting: MeetingRecord) -> URL? {
         guard let name = meeting.sysAudioFileName else { return nil }
-        let url = folderURL(for: meeting.id).appendingPathComponent(name)
+        let url = baseDirectory
+            .appendingPathComponent(meeting.id.uuidString, isDirectory: true)
+            .appendingPathComponent(name)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
