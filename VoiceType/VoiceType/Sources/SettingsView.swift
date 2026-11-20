@@ -13,9 +13,9 @@ enum DashboardSection: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .home: return "house"
-        case .meetings: return "person.2.wave.2"
+        case .meetings: return "person.2"
         case .history: return "clock"
-        case .dictionary: return "text.book.closed"
+        case .dictionary: return "book.closed"
         case .settings: return "gearshape"
         }
     }
@@ -171,27 +171,27 @@ private struct ClaudeSidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Primary Claude-style "+ New" CTA + sidebar collapse button
+            // Primary Granola-style "+ New" CTA + sidebar collapse button
             HStack(spacing: 8) {
                 if let activeID = appState.activeMeetingID {
                     Button {
                         appState.selectedMeetingID = activeID
                         appState.selectedSection = .meetings
                     } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: "waveform")
+                        HStack(spacing: 6) {
+                            ClaudeIcon(name: "waveform", size: 12, weight: .regular)
                                 .symbolEffect(.variableColor.iterative, isActive: isVisible)
                             Text("Запись")
-                                .font(.callout.weight(.semibold))
+                                .font(ClaudeFonts.uiMedium)
                                 .lineLimit(1)
                             Spacer(minLength: 2)
                             Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
-                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .font(ClaudeFonts.smallMedium.monospacedDigit())
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(theme.danger, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .padding(.vertical, 6)
+                        .background(theme.danger, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -204,21 +204,20 @@ private struct ClaudeSidebarView: View {
                             appState.selectedSection = .meetings
                         }
                     } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(theme.ink)
+                        HStack(spacing: 6) {
+                            ClaudeIcon(name: "plus", size: 11.5, weight: .regular)
+                                .foregroundStyle(theme.secondaryInk)
                             Text("Новая встреча")
-                                .font(.callout.weight(.medium))
+                                .font(ClaudeFonts.uiMedium)
                                 .foregroundStyle(theme.ink)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(theme.border, lineWidth: 1)
                         )
                     }
@@ -226,10 +225,9 @@ private struct ClaudeSidebarView: View {
                 }
 
                 Button(action: onCollapse) {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 13, weight: .medium))
+                    ClaudeIcon(name: "sidebar.left", size: 13.5, weight: .light)
                         .foregroundStyle(theme.secondaryInk)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 26, height: 26)
                         .background(theme.hoverFill.opacity(0.6), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -237,7 +235,7 @@ private struct ClaudeSidebarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
-            .padding(.bottom, 12)
+            .padding(.bottom, 10)
 
             // Navigation items
             VStack(alignment: .leading, spacing: 2) {
@@ -249,14 +247,14 @@ private struct ClaudeSidebarView: View {
 
             if !meetingsStore.meetings.isEmpty {
                 Text("Недавние")
-                    .font(.caption2.weight(.semibold))
+                    .font(ClaudeFonts.microMedium)
                     .foregroundStyle(theme.tertiaryInk)
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
-                    .padding(.bottom, 6)
+                    .padding(.bottom, 5)
 
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
+                    LazyVStack(alignment: .leading, spacing: 1.5) {
                         ForEach(meetingsStore.meetings.prefix(8)) { meeting in
                             recentMeetingRow(meeting)
                         }
@@ -280,25 +278,24 @@ private struct ClaudeSidebarView: View {
                 HStack(spacing: 8) {
                     Circle()
                         .fill(sidebarStatusColor)
-                        .frame(width: 8, height: 8)
+                        .frame(width: 7, height: 7)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(sidebarStatusTitle)
-                            .font(.caption.weight(.medium))
+                            .font(ClaudeFonts.smallMedium)
                             .foregroundStyle(theme.ink)
                             .lineLimit(1)
                         Text(settings.hotkey.rawValue)
-                            .font(.caption2)
+                            .font(ClaudeFonts.micro)
                             .foregroundStyle(theme.secondaryInk)
                             .lineLimit(1)
                     }
                     Spacer()
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.caption)
+                    ClaudeIcon(name: "slider.horizontal.3", size: 12, weight: .light)
                         .foregroundStyle(theme.secondaryInk)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6.5)
+                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -320,32 +317,31 @@ private struct ClaudeSidebarView: View {
         return Button {
             appState.selectedSection = section
         } label: {
-            HStack(spacing: 9) {
-                Image(systemName: section.systemImage)
-                    .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
+            HStack(spacing: 8.5) {
+                ClaudeIcon(name: section.systemImage, size: 13.5, weight: isSelected ? .regular : .light)
                     .foregroundStyle(isSelected ? theme.ink : theme.secondaryInk)
-                    .frame(width: 18)
+                    .frame(width: 17)
 
                 Text(section.rawValue)
-                    .font(.callout.weight(isSelected ? .medium : .regular))
-                    .foregroundStyle(theme.ink)
+                    .font(isSelected ? ClaudeFonts.uiMedium : ClaudeFonts.ui)
+                    .foregroundStyle(isSelected ? theme.ink : theme.ink.opacity(0.86))
                     .lineLimit(1)
 
                 Spacer(minLength: 4)
 
                 if section == .meetings, appState.activeMeetingID == nil, activeProcessingCount > 0 {
                     Text("\(activeProcessingCount)")
-                        .font(.caption2.weight(.semibold).monospacedDigit())
+                        .font(ClaudeFonts.microSemibold.monospacedDigit())
                         .foregroundStyle(theme.accentInk)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, 5.5)
+                        .padding(.vertical, 1.5)
                         .background(theme.accentSoft, in: Capsule())
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(isSelected ? theme.selectedFill : (isHovered ? theme.hoverFill : Color.clear))
             )
             .contentShape(Rectangle())
@@ -371,17 +367,20 @@ private struct ClaudeSidebarView: View {
                     ProgressView().controlSize(.mini)
                 } else if meeting.status == .recording {
                     Circle().fill(theme.danger).frame(width: 6, height: 6)
+                } else {
+                    ClaudeIcon(name: "doc", size: 10.5, weight: .light)
+                        .foregroundStyle(theme.tertiaryInk)
                 }
                 Text(meeting.title)
-                    .font(.caption.weight(isActiveMeeting ? .semibold : .regular))
+                    .font(isActiveMeeting ? ClaudeFonts.smallMedium : ClaudeFonts.small)
                     .foregroundStyle(isActiveMeeting ? theme.ink : theme.secondaryInk)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4.5)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: 6.5, style: .continuous)
                     .fill(isActiveMeeting ? theme.selectedFill : (isHovered ? theme.hoverFill : Color.clear))
             )
             .contentShape(Rectangle())
@@ -427,10 +426,9 @@ private struct CollapsedTopBarView: View {
     var body: some View {
         HStack(spacing: 10) {
             Button(action: onExpand) {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 13, weight: .medium))
+                ClaudeIcon(name: "sidebar.left", size: 13.5, weight: .light)
                     .foregroundStyle(theme.secondaryInk)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 26, height: 26)
                     .background(theme.hoverFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -445,21 +443,20 @@ private struct CollapsedTopBarView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: currentSection.systemImage)
+                HStack(spacing: 6) {
+                    ClaudeIcon(name: currentSection.systemImage, size: 12.5, weight: .light)
                         .foregroundStyle(theme.secondaryInk)
                     Text(currentSection.rawValue)
-                        .font(.callout.weight(.semibold))
+                        .font(ClaudeFonts.uiMedium)
                         .foregroundStyle(theme.ink)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                    ClaudeIcon(name: "chevron.down", size: 8.5, weight: .regular)
                         .foregroundStyle(theme.secondaryInk)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4.5)
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
             }
@@ -480,7 +477,7 @@ private struct CollapsedTopBarView: View {
                     }
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: "plus")
+                        ClaudeIcon(name: "plus", size: 11, weight: .medium)
                         Text("Новая встреча")
                     }
                 }

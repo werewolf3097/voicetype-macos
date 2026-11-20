@@ -19,10 +19,11 @@ struct DashboardDictionaryView: View {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Словарь терминов")
-                            .font(.system(size: 24, weight: .medium, design: .serif))
+                            .font(ClaudeFonts.pageTitle)
+                            .tracking(-0.35)
                             .foregroundStyle(theme.ink)
                         Text("Имена, бренды и термины, которые точнее распознаются в речи (до \(maxTerms) терминов на проект)")
-                            .font(.caption)
+                            .font(ClaudeFonts.small)
                             .foregroundStyle(theme.secondaryInk)
                     }
 
@@ -36,7 +37,7 @@ struct DashboardDictionaryView: View {
                         Task { await load() }
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "arrow.clockwise")
+                            ClaudeIcon(name: "arrow.clockwise", size: 11, weight: .light)
                             Text("Обновить")
                         }
                     }
@@ -46,26 +47,25 @@ struct DashboardDictionaryView: View {
 
                 if settings.gapiToken.isEmpty {
                     VStack(spacing: 10) {
-                        Image(systemName: "key.slash")
-                            .font(.title2)
+                        ClaudeIcon(name: "key.slash", size: 22, weight: .ultraLight)
                             .foregroundStyle(theme.warning)
                         Text("Не задан токен gapi")
-                            .font(.callout.weight(.semibold))
+                            .font(ClaudeFonts.uiMedium)
                             .foregroundStyle(theme.ink)
                         Text("Укажите API-токен в разделе «Настройки», чтобы синхронизировать словарь с console.gapi.uz.")
-                            .font(.caption)
+                            .font(ClaudeFonts.small)
                             .foregroundStyle(theme.secondaryInk)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 28)
-                    .claudeCard(theme, cornerRadius: 14, padding: 16)
+                    .claudeCard(theme, cornerRadius: 12, padding: 16)
                 } else {
                     // Add term composer bar
                     HStack(spacing: 8) {
                         TextField("Новый термин (например, Korzinka или EPAM)", text: $newTerm)
                             .textFieldStyle(.plain)
-                            .font(.callout)
+                            .font(ClaudeFonts.ui)
                             .foregroundStyle(theme.ink)
                             .onSubmit(addTerm)
 
@@ -73,48 +73,51 @@ struct DashboardDictionaryView: View {
                             .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
                             .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || terms.count >= maxTerms)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(theme.border, lineWidth: 1)
                     )
 
                     if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(theme.danger)
+                        HStack(spacing: 6) {
+                            ClaudeIcon(name: "exclamationmark.triangle", size: 11.5, weight: .light)
+                            Text(errorMessage)
+                                .font(ClaudeFonts.small)
+                        }
+                        .foregroundStyle(theme.danger)
                     }
 
                     if terms.isEmpty && !isLoading {
                         VStack(spacing: 8) {
-                            Image(systemName: "text.book.closed")
-                                .font(.title2)
+                            ClaudeIcon(name: "book.closed", size: 22, weight: .ultraLight)
                                 .foregroundStyle(theme.tertiaryInk)
                             Text("Словарь пока пуст")
-                                .font(.callout.weight(.medium))
+                                .font(ClaudeFonts.uiMedium)
                                 .foregroundStyle(theme.secondaryInk)
                             Text("Добавьте до \(maxTerms) специфичных слов, аббревиатур или имён.")
-                                .font(.caption)
+                                .font(ClaudeFonts.small)
                                 .foregroundStyle(theme.tertiaryInk)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 28)
-                        .claudeCard(theme, cornerRadius: 14, padding: 16)
+                        .claudeCard(theme, cornerRadius: 12, padding: 16)
                     } else {
                         VStack(spacing: 0) {
                             ForEach(Array(terms.enumerated()), id: \.element) { idx, term in
-                                HStack {
-                                    Label(term, systemImage: "tag")
-                                        .font(.callout)
+                                HStack(spacing: 9) {
+                                    ClaudeIcon(name: "tag", size: 12, weight: .light)
+                                        .foregroundStyle(theme.secondaryInk)
+                                    Text(term)
+                                        .font(ClaudeFonts.ui)
                                         .foregroundStyle(theme.ink)
                                     Spacer()
                                     Button {
                                         remove(term)
                                     } label: {
-                                        Image(systemName: "xmark")
-                                            .font(.caption)
+                                        ClaudeIcon(name: "xmark", size: 10.5, weight: .light)
                                             .foregroundStyle(theme.secondaryInk)
                                             .frame(width: 24, height: 24)
                                             .contentShape(Rectangle())
@@ -123,21 +126,21 @@ struct DashboardDictionaryView: View {
                                     .help("Удалить термин")
                                 }
                                 .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
+                                .padding(.vertical, 9)
 
                                 if idx < terms.count - 1 {
                                     Divider().overlay(theme.border)
                                 }
                             }
                         }
-                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .strokeBorder(theme.border, lineWidth: 1)
                         )
 
                         Text("Использовано \(terms.count) из \(maxTerms) терминов")
-                            .font(.caption.monospacedDigit())
+                            .font(ClaudeFonts.small.monospacedDigit())
                             .foregroundStyle(theme.secondaryInk)
                     }
                 }

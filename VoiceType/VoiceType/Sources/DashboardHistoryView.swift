@@ -25,10 +25,11 @@ struct DashboardHistoryView: View {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("История диктовок")
-                            .font(.system(size: 24, weight: .medium, design: .serif))
+                            .font(ClaudeFonts.pageTitle)
+                            .tracking(-0.35)
                             .foregroundStyle(theme.ink)
                         Text("Хранится только на этом Mac в Application Support/VoiceType/history.json")
-                            .font(.caption)
+                            .font(ClaudeFonts.small)
                             .foregroundStyle(theme.secondaryInk)
                     }
 
@@ -44,29 +45,27 @@ struct DashboardHistoryView: View {
 
                 if !history.records.isEmpty {
                     HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
+                        ClaudeIcon(name: "magnifyingglass", size: 11.5, weight: .light)
                             .foregroundStyle(theme.secondaryInk)
-                            .font(.caption)
                         TextField("Поиск по расшифровкам…", text: $searchQuery)
                             .textFieldStyle(.plain)
-                            .font(.callout)
+                            .font(ClaudeFonts.ui)
                             .foregroundStyle(theme.ink)
                         if !searchQuery.isEmpty {
                             Button {
                                 searchQuery = ""
                             } label: {
-                                Image(systemName: "xmark.circle.fill")
+                                ClaudeIcon(name: "xmark", size: 10, weight: .regular)
                                     .foregroundStyle(theme.secondaryInk)
-                                    .font(.caption)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .padding(.vertical, 6)
+                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(theme.border, lineWidth: 1)
                     )
                 }
@@ -74,22 +73,21 @@ struct DashboardHistoryView: View {
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal, 28)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
+            .padding(.top, 22)
+            .padding(.bottom, 14)
 
             Divider().overlay(theme.border)
 
             if history.records.isEmpty {
                 VStack(spacing: 10) {
                     Spacer()
-                    Image(systemName: "clock")
-                        .font(.system(size: 28))
+                    ClaudeIcon(name: "clock", size: 24, weight: .ultraLight)
                         .foregroundStyle(theme.tertiaryInk)
                     Text("История диктовок пуста")
-                        .font(.callout.weight(.medium))
+                        .font(ClaudeFonts.uiMedium)
                         .foregroundStyle(theme.secondaryInk)
                     Text("Надиктуйте любой текст по хоткею — расшифровки появятся здесь.")
-                        .font(.caption)
+                        .font(ClaudeFonts.small)
                         .foregroundStyle(theme.tertiaryInk)
                     Spacer()
                 }
@@ -97,23 +95,23 @@ struct DashboardHistoryView: View {
             } else if filteredRecords.isEmpty {
                 VStack(spacing: 8) {
                     Spacer()
-                    Image(systemName: "magnifyingglass")
-                        .font(.title2)
+                    ClaudeIcon(name: "magnifyingglass", size: 22, weight: .ultraLight)
                         .foregroundStyle(theme.tertiaryInk)
                     Text("Ничего не найдено")
-                        .font(.callout.weight(.medium))
+                        .font(ClaudeFonts.uiMedium)
                         .foregroundStyle(theme.secondaryInk)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 10) {
+                    LazyVStack(spacing: 8) {
                         ForEach(filteredRecords) { record in
                             HStack(alignment: .top, spacing: 12) {
-                                VStack(alignment: .leading, spacing: 6) {
+                                VStack(alignment: .leading, spacing: 5) {
                                     Text(record.text)
-                                        .font(.body)
+                                        .font(ClaudeFonts.body)
+                                        .lineSpacing(3)
                                         .foregroundStyle(theme.ink)
                                         .textSelection(.enabled)
 
@@ -131,7 +129,7 @@ struct DashboardHistoryView: View {
                                                 .foregroundStyle(theme.accentInk)
                                         }
                                     }
-                                    .font(.caption)
+                                    .font(ClaudeFonts.small)
                                     .foregroundStyle(theme.secondaryInk)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -146,7 +144,7 @@ struct DashboardHistoryView: View {
                                     }
                                 } label: {
                                     HStack(spacing: 4) {
-                                        Image(systemName: copiedID == record.id ? "checkmark" : "doc.on.doc")
+                                        ClaudeIcon(name: copiedID == record.id ? "checkmark" : "doc.on.doc", size: 11, weight: .light)
                                         if copiedID == record.id {
                                             Text("Скопировано")
                                         }
@@ -155,7 +153,7 @@ struct DashboardHistoryView: View {
                                 .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
                                 .help("Скопировать текст")
                             }
-                            .claudeCard(theme, cornerRadius: 12, padding: 14)
+                            .claudeCard(theme, cornerRadius: 11, padding: 13)
                             .contextMenu {
                                 Button("Скопировать") {
                                     TextInjector.copyToClipboard(record.text)

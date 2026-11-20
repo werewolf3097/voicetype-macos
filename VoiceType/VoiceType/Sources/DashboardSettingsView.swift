@@ -20,10 +20,11 @@ struct DashboardSettingsView: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Настройки")
-                        .font(.system(size: 24, weight: .medium, design: .serif))
+                        .font(ClaudeFonts.pageTitle)
+                        .tracking(-0.35)
                         .foregroundStyle(theme.ink)
                     Text("API-ключи, поведение хоткея, параметры встреч и системные разрешения")
-                        .font(.caption)
+                        .font(ClaudeFonts.small)
                         .foregroundStyle(theme.secondaryInk)
                 }
 
@@ -302,16 +303,19 @@ struct DashboardSettingsView: View {
 
             HStack(spacing: 10) {
                 if audioStats.totalBytes > 0 {
-                    Label(
-                        "На диске: \(formattedBytes(audioStats.totalBytes)) (\(meetingsCountLabel(audioStats.meetingsWithAudioCount)))",
-                        systemImage: "waveform"
-                    )
-                    .font(.caption2)
+                    HStack(spacing: 5) {
+                        ClaudeIcon(name: "waveform", size: 10.5, weight: .light)
+                        Text("На диске: \(formattedBytes(audioStats.totalBytes)) (\(meetingsCountLabel(audioStats.meetingsWithAudioCount)))")
+                            .font(ClaudeFonts.micro)
+                    }
                     .foregroundStyle(theme.secondaryInk)
                 } else {
-                    Label("Сохранённых аудиофайлов нет", systemImage: "checkmark.circle")
-                        .font(.caption2)
-                        .foregroundStyle(theme.secondaryInk)
+                    HStack(spacing: 5) {
+                        ClaudeIcon(name: "checkmark.circle", size: 10.5, weight: .light)
+                        Text("Сохранённых аудиофайлов нет")
+                            .font(ClaudeFonts.micro)
+                    }
+                    .foregroundStyle(theme.secondaryInk)
                 }
 
                 Spacer(minLength: 8)
@@ -361,15 +365,14 @@ struct DashboardSettingsView: View {
                 HStack(spacing: 6) {
                     TextField("Путь к папке или https://...", text: $settings.exportDestination)
                         .textFieldStyle(.plain)
-                        .font(.callout)
+                        .font(ClaudeFonts.ui)
                         .foregroundStyle(theme.ink)
 
                     if !settings.exportDestination.isEmpty {
                         Button {
                             settings.exportDestination = ""
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
+                            ClaudeIcon(name: "xmark", size: 10, weight: .regular)
                                 .foregroundStyle(theme.secondaryInk)
                         }
                         .buttonStyle(.plain)
@@ -377,10 +380,10 @@ struct DashboardSettingsView: View {
                     }
                 }
                 .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.vertical, 5.5)
+                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
 
@@ -402,16 +405,19 @@ struct DashboardSettingsView: View {
         case .none:
             EmptyView()
         case .webhook(let url):
-            Label("Экспорт по Webhook URL (\(url.host ?? url.absoluteString))", systemImage: "checkmark.circle.fill")
-                .font(.caption2)
-                .foregroundStyle(theme.success)
+            HStack(spacing: 5) {
+                ClaudeIcon(name: "checkmark.circle", size: 10.5, weight: .light)
+                Text("Экспорт по Webhook URL (\(url.host ?? url.absoluteString))")
+                    .font(ClaudeFonts.micro)
+            }
+            .foregroundStyle(theme.success)
         case .folder(let folderURL):
             let exists = FileManager.default.fileExists(atPath: folderURL.path)
-            Label(
-                exists ? "Папка найдена: \(folderURL.lastPathComponent)" : "Папка будет создана при экспорте",
-                systemImage: exists ? "checkmark.circle.fill" : "folder.badge.plus"
-            )
-            .font(.caption2)
+            HStack(spacing: 5) {
+                ClaudeIcon(name: exists ? "checkmark.circle" : "folder.badge.plus", size: 10.5, weight: .light)
+                Text(exists ? "Папка найдена: \(folderURL.lastPathComponent)" : "Папка будет создана при экспорте")
+                    .font(ClaudeFonts.micro)
+            }
             .foregroundStyle(exists ? theme.success : theme.secondaryInk)
         }
     }
@@ -433,18 +439,18 @@ struct DashboardSettingsView: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(ClaudeFonts.smallMedium)
                 .foregroundStyle(theme.secondaryInk)
                 .padding(.horizontal, 4)
 
             VStack(alignment: .leading, spacing: 0) {
                 content()
             }
-            .background(theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(theme.border, lineWidth: 1)
             )
             .shadow(color: theme.cardShadow, radius: 8, y: 2)
@@ -471,17 +477,17 @@ struct DashboardSettingsView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 11)
     }
 
     private func settingLabel(_ title: String, caption: String?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.callout.weight(.medium))
+                .font(ClaudeFonts.uiMedium)
                 .foregroundStyle(theme.ink)
             if let caption {
                 Text(caption)
-                    .font(.caption)
+                    .font(ClaudeFonts.small)
                     .foregroundStyle(theme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -495,10 +501,10 @@ struct DashboardSettingsView: View {
         action: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            ClaudeIcon(name: granted ? "checkmark.circle" : "exclamationmark.triangle", size: 12.5, weight: .light)
                 .foregroundStyle(granted ? theme.success : theme.warning)
             Text(status)
-                .font(.caption.weight(.medium))
+                .font(ClaudeFonts.smallMedium)
                 .foregroundStyle(granted ? theme.secondaryInk : theme.warning)
             if granted {
                 Button(buttonTitle, action: action)

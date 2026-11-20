@@ -23,14 +23,17 @@ struct MenuBarView: View {
             statusHeader
 
             if case .error(let message) = appState.status {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(theme.danger)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(theme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                HStack(spacing: 7) {
+                    ClaudeIcon(name: "exclamationmark.triangle", size: 12, weight: .light)
+                    Text(message)
+                        .font(ClaudeFonts.small)
+                }
+                .foregroundStyle(theme.danger)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(theme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
             if !appState.hotkeyActive || !appState.microphoneAuthorized || (settings.autoPaste && !appState.accessibilityAuthorized) {
@@ -46,11 +49,11 @@ struct MenuBarView: View {
                             .fill(theme.danger)
                             .frame(width: 7, height: 7)
                         Text("Запись встречи")
-                            .font(.caption.weight(.semibold))
+                            .font(ClaudeFonts.smallSemibold)
                             .foregroundStyle(theme.danger)
                         Spacer()
                         Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
-                            .font(.caption.monospacedDigit().weight(.medium))
+                            .font(ClaudeFonts.smallMedium.monospacedDigit())
                             .foregroundStyle(theme.secondaryInk)
                     }
 
@@ -60,14 +63,14 @@ struct MenuBarView: View {
                         DashboardWindowController.shared.show(section: .meetings)
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "stop.circle.fill")
+                            ClaudeIcon(name: "stop.circle", size: 12, weight: .regular)
                             Text("Завершить и создать рекап")
                         }
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
 
-                    ClaudeMenuRowButton("Открыть блокнот встречи…", systemImage: "note.text") {
+                    ClaudeMenuRowButton("Открыть блокнот встречи…", systemImage: "doc.text") {
                         dismissMenuBar()
                         DashboardWindowController.shared.show(section: .meetings)
                     }
@@ -84,7 +87,7 @@ struct MenuBarView: View {
                     DashboardWindowController.shared.show(section: .meetings)
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "plus.circle.fill")
+                        ClaudeIcon(name: "plus", size: 11.5, weight: .medium)
                         Text("Начать запись встречи")
                     }
                     .frame(maxWidth: .infinity)
@@ -100,7 +103,7 @@ struct MenuBarView: View {
                     DashboardWindowController.shared.show(section: .home)
                 }
 
-                ClaudeMenuRowButton("Встречи и рекапы…", systemImage: "person.2.wave.2") {
+                ClaudeMenuRowButton("Встречи и рекапы…", systemImage: "person.2") {
                     dismissMenuBar()
                     DashboardWindowController.shared.show(section: .meetings)
                 }
@@ -121,7 +124,7 @@ struct MenuBarView: View {
             .keyboardShortcut("q", modifiers: .command)
         }
         .padding(10)
-        .frame(width: 280)
+        .frame(width: 274)
         .background(theme.canvas)
         .background(MenuBarWindowAccessor(box: windowBox))
         .tint(theme.accent)
@@ -130,25 +133,25 @@ struct MenuBarView: View {
     }
 
     private var statusHeader: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 9) {
             statusIcon
-                .font(.title3)
-                .frame(width: 22)
+                .frame(width: 24, height: 24)
+                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(statusTitle)
-                    .font(.callout.weight(.semibold))
+                    .font(ClaudeFonts.uiMedium)
                     .foregroundStyle(theme.ink)
                 Text(hotkeyHint)
-                    .font(.caption2)
+                    .font(ClaudeFonts.micro)
                     .foregroundStyle(theme.secondaryInk)
                     .lineLimit(1)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 3)
     }
 
     private var hotkeyHint: String {
@@ -161,18 +164,18 @@ struct MenuBarView: View {
     private var statusIcon: some View {
         switch appState.status {
         case .idle:
-            Image(systemName: "mic.circle.fill")
+            ClaudeIcon(name: "mic", size: 12.5, weight: .light)
                 .foregroundStyle(theme.accent)
         case .recording:
-            Image(systemName: "waveform.circle.fill")
+            ClaudeIcon(name: "waveform", size: 12.5, weight: .regular)
                 .symbolEffect(.variableColor.iterative, isActive: true)
                 .foregroundStyle(theme.danger)
         case .transcribing, .cleaning:
-            Image(systemName: "waveform.circle.fill")
+            ClaudeIcon(name: "waveform", size: 12.5, weight: .regular)
                 .symbolEffect(.pulse, isActive: true)
                 .foregroundStyle(theme.accent)
         case .error:
-            Image(systemName: "exclamationmark.triangle.fill")
+            ClaudeIcon(name: "exclamationmark.triangle", size: 12.5, weight: .light)
                 .foregroundStyle(theme.warning)
         }
     }
@@ -226,7 +229,7 @@ struct MenuBarView: View {
     private func permissionAction(_ title: String, buttonTitle: String, action: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.caption)
+                .font(ClaudeFonts.small)
                 .foregroundStyle(theme.warning)
                 .lineLimit(2)
             Spacer()
@@ -293,16 +296,16 @@ private struct ClaudeMenuRowButton: View {
             action()
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: systemImage)
+                ClaudeIcon(name: systemImage, size: 12.5, weight: isHovered ? .regular : .light)
                     .frame(width: 16)
                     .foregroundStyle(isHovered ? theme.ink : theme.secondaryInk)
                 Text(title)
-                    .font(.callout)
+                    .font(ClaudeFonts.ui)
                     .foregroundStyle(theme.ink)
                 Spacer()
                 if let shortcut {
                     Text(shortcut)
-                        .font(.caption)
+                        .font(ClaudeFonts.micro)
                         .foregroundStyle(isHovered ? theme.secondaryInk : theme.tertiaryInk)
                 }
             }

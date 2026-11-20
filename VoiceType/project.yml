@@ -10,9 +10,13 @@ targets:
     platform: macOS
     sources:
       - path: VoiceType/Sources
+      - path: VoiceType/Resources/Fonts
+        type: folder
+        buildPhase: resources
     info:
       path: VoiceType/Resources/Info.plist
       properties:
+        ATSApplicationFontsPath: "Fonts"
         NSMicrophoneUsageDescription: "VoiceType записывает голос, чтобы превратить его в текст."
         NSAudioCaptureUsageDescription: "VoiceType записывает системный звук во время встреч, чтобы распознавать речь собеседников."
         NSAppTransportSecurity:

@@ -20,17 +20,17 @@ struct DashboardHomeView: View {
 
                 if case .error(let message) = appState.status {
                     HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                        ClaudeIcon(name: "exclamationmark.triangle", size: 13, weight: .light)
                             .foregroundStyle(theme.warning)
                         Text(message)
-                            .font(.callout)
+                            .font(ClaudeFonts.ui)
                             .foregroundStyle(theme.ink)
                         Spacer()
                     }
-                    .padding(12)
-                    .background(theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(11)
+                    .background(theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(theme.warning.opacity(0.25))
                     )
                 }
@@ -75,18 +75,18 @@ struct DashboardHomeView: View {
 
     private var heroTitleBlock: some View {
         HStack(spacing: 12) {
-            Image(systemName: "waveform")
-                .font(.system(size: 22, weight: .semibold))
+            ClaudeIcon(name: "waveform", size: 18, weight: .light)
                 .foregroundStyle(theme.accent)
-                .frame(width: 38, height: 38)
-                .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: 36, height: 36)
+                .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("Говорите, не печатайте")
-                    .font(.system(size: 26, weight: .medium, design: .serif))
+                    .font(ClaudeFonts.heroTitle)
+                    .tracking(-0.45)
                     .foregroundStyle(theme.ink)
                 Text(hotkeyHintText)
-                    .font(.caption)
+                    .font(ClaudeFonts.small)
                     .foregroundStyle(theme.secondaryInk)
             }
         }
@@ -99,17 +99,16 @@ struct DashboardHomeView: View {
     }
 
     private var statusPill: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 6) {
             statusIcon
-                .font(.caption.weight(.semibold))
             Text(statusTitle)
-                .font(.caption.weight(.medium))
+                .font(ClaudeFonts.smallMedium)
                 .lineLimit(1)
                 .foregroundStyle(theme.ink)
         }
         .fixedSize()
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
         .background(theme.surface, in: Capsule())
         .overlay(Capsule().strokeBorder(theme.border, lineWidth: 1))
     }
@@ -117,7 +116,7 @@ struct DashboardHomeView: View {
     // MARK: - Claude Composer Card
 
     private var claudeComposerCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 13) {
             if appState.activeMeetingID != nil {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 12) {
@@ -134,7 +133,7 @@ struct DashboardHomeView: View {
                 .padding(.vertical, 4)
             } else {
                 TextField("О чём будет встреча? (необязательно — можно оставить пустым)", text: $quickMeetingTitle)
-                    .font(.body)
+                    .font(ClaudeFonts.body)
                     .textFieldStyle(.plain)
                     .foregroundStyle(theme.ink)
                     .onSubmit {
@@ -159,27 +158,26 @@ struct DashboardHomeView: View {
                 }
             }
         }
-        .padding(16)
-        .background(theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(15)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
                 .strokeBorder(theme.border, lineWidth: 1)
         )
-        .shadow(color: theme.cardShadow, radius: 14, y: 5)
+        .shadow(color: theme.cardShadow, radius: 12, y: 4)
     }
 
     private var activeRecordingInfo: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "waveform")
-                .font(.title3)
+        HStack(spacing: 11) {
+            ClaudeIcon(name: "waveform", size: 17, weight: .regular)
                 .symbolEffect(.variableColor.iterative, isActive: true)
                 .foregroundStyle(theme.danger)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Сейчас идёт запись встречи")
-                    .font(.headline)
+                    .font(ClaudeFonts.uiSemibold)
                     .foregroundStyle(theme.ink)
                 Text("Время записи: \(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))")
-                    .font(.callout.monospacedDigit())
+                    .font(ClaudeFonts.small.monospacedDigit())
                     .foregroundStyle(theme.secondaryInk)
             }
         }
@@ -202,7 +200,7 @@ struct DashboardHomeView: View {
     }
 
     private var composerPickers: some View {
-        ClaudeFlowLayout(horizontalSpacing: 8, verticalSpacing: 6) {
+        ClaudeFlowLayout(horizontalSpacing: 7, verticalSpacing: 6) {
             Menu {
                 ForEach(MeetingTemplate.allCases) { tpl in
                     Button {
@@ -213,19 +211,18 @@ struct DashboardHomeView: View {
                 }
             } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: selectedTemplate.systemImage)
-                        .font(.caption)
+                    ClaudeIcon(name: selectedTemplate.systemImage, size: 11.5, weight: .light)
+                        .foregroundStyle(theme.secondaryInk)
                     Text(selectedTemplate.rawValue)
-                        .font(.caption.weight(.medium))
+                        .font(ClaudeFonts.smallMedium)
                         .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                    ClaudeIcon(name: "chevron.down", size: 8.5, weight: .regular)
                         .foregroundStyle(theme.secondaryInk)
                 }
                 .foregroundStyle(theme.ink)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 9)
                 .padding(.vertical, 5)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -241,19 +238,18 @@ struct DashboardHomeView: View {
                 }
             } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: settings.meetingAudioSource == .micAndSystem ? "speaker.wave.2" : "mic")
-                        .font(.caption)
+                    ClaudeIcon(name: settings.meetingAudioSource == .micAndSystem ? "speaker.wave.2" : "mic", size: 11.5, weight: .light)
+                        .foregroundStyle(theme.secondaryInk)
                     Text(settings.meetingAudioSource.rawValue)
-                        .font(.caption.weight(.medium))
+                        .font(ClaudeFonts.smallMedium)
                         .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                    ClaudeIcon(name: "chevron.down", size: 8.5, weight: .regular)
                         .foregroundStyle(theme.secondaryInk)
                 }
                 .foregroundStyle(theme.ink)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 9)
                 .padding(.vertical, 5)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -265,8 +261,8 @@ struct DashboardHomeView: View {
         Button {
             startQuickMeeting(template: selectedTemplate)
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "record.circle")
+            HStack(spacing: 5.5) {
+                ClaudeIcon(name: "record.circle", size: 12, weight: .regular)
                 Text("Начать встречу")
             }
         }
@@ -274,24 +270,23 @@ struct DashboardHomeView: View {
     }
 
     private var templateChipsRow: some View {
-        ClaudeFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+        ClaudeFlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
             ForEach(MeetingTemplate.allCases) { tpl in
                 Button {
                     selectedTemplate = tpl
                     startQuickMeeting(template: tpl)
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: tpl.systemImage)
-                            .font(.caption2)
+                        ClaudeIcon(name: tpl.systemImage, size: 11, weight: .light)
                             .foregroundStyle(theme.secondaryInk)
                         Text(tpl.rawValue)
-                            .font(.caption.weight(.medium))
+                            .font(ClaudeFonts.small)
                             .lineLimit(1)
                             .foregroundStyle(theme.secondaryInk)
                     }
                     .fixedSize()
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
                     .background(theme.surface, in: Capsule())
                     .overlay(Capsule().strokeBorder(theme.border, lineWidth: 1))
                 }
@@ -374,10 +369,10 @@ struct DashboardHomeView: View {
                 }
             }
         }
-        .padding(12)
-        .background(theme.warning.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(11)
+        .background(theme.warning.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .strokeBorder(theme.warning.opacity(0.25))
         )
     }
@@ -387,11 +382,11 @@ struct DashboardHomeView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: systemImage)
+            ClaudeIcon(name: systemImage, size: 12.5, weight: .light)
                 .foregroundStyle(theme.warning)
                 .frame(width: 16)
             content()
-                .font(.caption)
+                .font(ClaudeFonts.small)
                 .foregroundStyle(theme.ink)
         }
     }
@@ -410,34 +405,35 @@ struct DashboardHomeView: View {
     }
 
     private func statPill(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.title3.weight(.semibold).monospacedDigit())
+                .font(ClaudeFonts.statNumber.monospacedDigit())
+                .tracking(-0.3)
                 .foregroundStyle(theme.ink)
             Text(title)
-                .font(.caption)
+                .font(ClaudeFonts.small)
                 .foregroundStyle(theme.secondaryInk)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .claudeCard(theme, cornerRadius: 12, padding: 12)
+        .claudeCard(theme, cornerRadius: 11, padding: 12)
     }
 
     @ViewBuilder
     private var lastTranscriptSection: some View {
         if let last = history.records.first {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 8) {
                     Text("Последняя диктовка")
-                        .font(.callout.weight(.semibold))
+                        .font(ClaudeFonts.uiMedium)
                         .foregroundStyle(theme.ink)
 
                     if let lang = last.languageSummary, !lang.isEmpty {
                         Text(lang)
-                            .font(.caption2.weight(.semibold))
+                            .font(ClaudeFonts.microMedium)
                             .foregroundStyle(theme.accentInk)
                             .lineLimit(1)
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, 7)
                             .padding(.vertical, 2)
                             .background(theme.accentSoft, in: Capsule())
                     }
@@ -445,7 +441,7 @@ struct DashboardHomeView: View {
                     Spacer()
 
                     Text(last.date, format: .dateTime.day().month().hour().minute())
-                        .font(.caption)
+                        .font(ClaudeFonts.small)
                         .foregroundStyle(theme.secondaryInk)
                         .lineLimit(1)
 
@@ -457,7 +453,7 @@ struct DashboardHomeView: View {
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: copiedLast ? "checkmark" : "doc.on.doc")
+                            ClaudeIcon(name: copiedLast ? "checkmark" : "doc.on.doc", size: 11, weight: .light)
                             Text(copiedLast ? "Скопировано" : "Копировать")
                         }
                     }
@@ -465,7 +461,8 @@ struct DashboardHomeView: View {
                 }
 
                 Text(last.text)
-                    .font(.body)
+                    .font(ClaudeFonts.body)
+                    .lineSpacing(3)
                     .foregroundStyle(theme.ink)
                     .textSelection(.enabled)
                     .lineLimit(5)
@@ -477,17 +474,16 @@ struct DashboardHomeView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text("Вся история")
-                            Image(systemName: "arrow.right")
-                                .font(.caption2)
+                            ClaudeIcon(name: "arrow.right", size: 10, weight: .light)
                         }
-                        .font(.caption.weight(.medium))
+                        .font(ClaudeFonts.smallMedium)
                         .foregroundStyle(theme.accent)
                     }
                     .buttonStyle(.plain)
                     Spacer()
                 }
             }
-            .claudeCard(theme, cornerRadius: 14, padding: 16)
+            .claudeCard(theme, cornerRadius: 12, padding: 14)
         }
     }
 
@@ -495,17 +491,17 @@ struct DashboardHomeView: View {
     private var statusIcon: some View {
         switch appState.status {
         case .idle:
-            Image(systemName: "mic.fill").foregroundStyle(theme.accent)
+            ClaudeIcon(name: "mic", size: 11.5, weight: .light).foregroundStyle(theme.accent)
         case .recording:
-            Image(systemName: "waveform")
+            ClaudeIcon(name: "waveform", size: 11.5, weight: .regular)
                 .symbolEffect(.variableColor.iterative, isActive: true)
                 .foregroundStyle(theme.danger)
         case .transcribing, .cleaning:
-            Image(systemName: "waveform")
+            ClaudeIcon(name: "waveform", size: 11.5, weight: .regular)
                 .symbolEffect(.pulse, isActive: true)
                 .foregroundStyle(theme.accent)
         case .error:
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(theme.warning)
+            ClaudeIcon(name: "exclamationmark.triangle", size: 11.5, weight: .light).foregroundStyle(theme.warning)
         }
     }
 
