@@ -266,15 +266,41 @@ final class AppState: ObservableObject {
     private func transcribeAndInsert(fileURL: URL, durationSeconds: Double) async {
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
-        guard !settings.gapiToken.isEmpty else {
-            status = .error("Не задан токен gapi. Откройте настройки.")
-            return
+        let gapiToken = settings.gapiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let coordinator: DictationTranscriptionCoordinator
+
+        if settings.useHomeServer {
+            let gatewayToken = settings.homeServerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !gatewayToken.isEmpty else {
+                status = .error("Не задан токен домашнего сервера. Откройте настройки.")
+                return
+            }
+            let homeProvider = HomeServerProvider(config: settings.homeServerConfig)
+            let fallbackProvider: (any TranscriptionProvider)? = gapiToken.isEmpty
+                ? nil
+                : GapiTranscriptionProvider(token: gapiToken)
+            coordinator = DictationTranscriptionCoordinator(
+                primary: homeProvider,
+                fallback: fallbackProvider
+            ) { reason in
+                NotificationHelper.notify(
+                    title: "Домашний сервер недоступен",
+                    body: "Переключился на gapi.uz (\(reason))."
+                )
+            }
+        } else {
+            guard !gapiToken.isEmpty else {
+                status = .error("Не задан токен gapi. Откройте настройки.")
+                return
+            }
+            coordinator = DictationTranscriptionCoordinator(
+                primary: GapiTranscriptionProvider(token: gapiToken)
+            )
         }
 
         do {
             try Task.checkCancellation()
-            let result = try await GapiClient(token: settings.gapiToken)
-                .transcribe(fileURL: fileURL)
+            let result = try await coordinator.transcribe(fileURL: fileURL)
             try Task.checkCancellation()
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -290,7 +316,9 @@ final class AppState: ObservableObject {
                 text: text,
                 durationSeconds: durationSeconds,
                 languageCode: result.languageCode,
-                languageSummary: result.languageSummary
+                languageSummary: result.languageSummary,
+                engine: result.engine,
+                latencyMs: result.latencyMs
             )
             TextInjector.copyToClipboard(text)
             if settings.autoPaste {

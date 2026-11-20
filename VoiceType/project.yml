@@ -32,10 +32,35 @@ targets:
         ENABLE_HARDENED_RUNTIME: false
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  VoiceTypeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: VoiceTypeTests
+      - path: VoiceType/Sources/AudioCompressor.swift
+      - path: VoiceType/Sources/TranscriptionProvider.swift
+      - path: VoiceType/Sources/HomeServerProvider.swift
+      - path: VoiceType/Sources/HistoryStore.swift
+      - path: VoiceType/Sources/GapiClient.swift
+      - path: VoiceType/Sources/RussianTransliterator.swift
+      - path: VoiceType/Sources/TranscriptionProgress.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.farrukh.voicetype.tests
+        SWIFT_VERSION: "5.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
 schemes:
   VoiceType:
     build:
       targets:
         VoiceType: all
+        VoiceTypeTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - VoiceTypeTests
