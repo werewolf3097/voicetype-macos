@@ -71,6 +71,30 @@ enum MeetingAudioSource: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 }
 
+enum MeetingAudioRetention: String, CaseIterable, Identifiable, Codable {
+    case deleteAfterTranscription = "Удалять после расшифровки"
+    case oneWeek = "1 неделя"
+    case twoWeeks = "2 недели"
+    case oneMonth = "1 месяц"
+    case threeMonths = "3 месяца"
+    case forever = "Хранить всегда"
+
+    var id: String { rawValue }
+
+    /// Количество дней хранения оригинала аудио после даты встречи.
+    /// `0` — удалять сразу после успешной расшифровки; `nil` — хранить бессрочно.
+    var retentionDays: Int? {
+        switch self {
+        case .deleteAfterTranscription: return 0
+        case .oneWeek: return 7
+        case .twoWeeks: return 14
+        case .oneMonth: return 30
+        case .threeMonths: return 90
+        case .forever: return nil
+        }
+    }
+}
+
 final class SettingsStore: ObservableObject {
     @Published var hotkey: PushToTalkKey {
         didSet { UserDefaults.standard.set(hotkey.rawValue, forKey: "hotkey") }
@@ -102,8 +126,11 @@ final class SettingsStore: ObservableObject {
     @Published var enableGapiSummary: Bool {
         didSet { UserDefaults.standard.set(enableGapiSummary, forKey: "enableGapiSummary") }
     }
-    @Published var keepMeetingAudio: Bool {
-        didSet { UserDefaults.standard.set(keepMeetingAudio, forKey: "keepMeetingAudio") }
+    @Published var meetingAudioRetention: MeetingAudioRetention {
+        didSet {
+            UserDefaults.standard.set(meetingAudioRetention.rawValue, forKey: "meetingAudioRetention")
+            UserDefaults.standard.set(meetingAudioRetention != .deleteAfterTranscription, forKey: "keepMeetingAudio")
+        }
     }
     @Published var whisperServerURL: String {
         didSet { UserDefaults.standard.set(whisperServerURL, forKey: "whisperServerURL") }
@@ -117,6 +144,10 @@ final class SettingsStore: ObservableObject {
     }
     @Published var anthropicApiKey: String {
         didSet { KeychainStore.set(anthropicApiKey, forKey: "anthropicApiKey") }
+    }
+
+    var keepMeetingAudio: Bool {
+        meetingAudioRetention != .deleteAfterTranscription
     }
 
     var hasExternalWhisperServer: Bool {
@@ -138,7 +169,14 @@ final class SettingsStore: ObservableObject {
         self.showDockIcon = defaults.object(forKey: "showDockIcon") as? Bool ?? true
         self.meetingAudioSource = MeetingAudioSource(rawValue: defaults.string(forKey: "meetingAudioSource") ?? "") ?? .micAndSystem
         self.enableGapiSummary = defaults.object(forKey: "enableGapiSummary") as? Bool ?? false
-        self.keepMeetingAudio = defaults.object(forKey: "keepMeetingAudio") as? Bool ?? false
+        if let rawRetention = defaults.string(forKey: "meetingAudioRetention"),
+           let parsed = MeetingAudioRetention(rawValue: rawRetention) {
+            self.meetingAudioRetention = parsed
+        } else if let legacyKeep = defaults.object(forKey: "keepMeetingAudio") as? Bool {
+            self.meetingAudioRetention = legacyKeep ? .forever : .deleteAfterTranscription
+        } else {
+            self.meetingAudioRetention = .deleteAfterTranscription
+        }
         self.whisperServerURL = defaults.string(forKey: "whisperServerURL") ?? ""
         self.exportDestination = defaults.string(forKey: "exportDestination")
             ?? defaults.string(forKey: "obsidianRecapsFolder")

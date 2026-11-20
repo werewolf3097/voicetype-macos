@@ -41,6 +41,7 @@ final class AppState: ObservableObject {
     private var meetingStartedAt: Date?
     private var meetingTimer: Timer?
     private var meetingQueueTimer: Timer?
+    private var audioCleanupTimer: Timer?
     private var meetingTranscriptionTask: Task<Void, Never>?
     private var activeTranscriptionMeetingID: UUID?
     private var activeTranscriptionToken: UUID?
@@ -70,6 +71,7 @@ final class AppState: ObservableObject {
         }
 
         self.refreshPermissionsAndHotkey(forceRestartTap: true)
+        self.cleanupExpiredMeetingAudio()
 
         NotificationCenter.default.addObserver(
             forName: NSApplication.didFinishLaunchingNotification,
@@ -103,6 +105,13 @@ final class AppState: ObservableObject {
         meetingQueueTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.processQueuedMeetingsIfNeeded()
+            }
+        }
+
+        // Periodically purge expired meeting audio files according to retention setting.
+        audioCleanupTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.cleanupExpiredMeetingAudio()
             }
         }
 
@@ -727,16 +736,23 @@ final class AppState: ObservableObject {
         }
     }
 
+    @discardableResult
+    func cleanupExpiredMeetingAudio() -> Int {
+        meetings.cleanupExpiredAudio(retention: settings.meetingAudioRetention)
+    }
+
     private func cleanupAudioIfNotKeeping(for meetingID: UUID, micURL: URL, sysURL: URL?) {
-        guard !settings.keepMeetingAudio else { return }
-        try? FileManager.default.removeItem(at: micURL)
-        if let sysURL {
-            try? FileManager.default.removeItem(at: sysURL)
+        if !settings.keepMeetingAudio {
+            try? FileManager.default.removeItem(at: micURL)
+            if let sysURL {
+                try? FileManager.default.removeItem(at: sysURL)
+            }
+            meetings.update(meetingID) { record in
+                record.audioFileName = nil
+                record.sysAudioFileName = nil
+            }
         }
-        meetings.update(meetingID) { record in
-            record.audioFileName = nil
-            record.sysAudioFileName = nil
-        }
+        cleanupExpiredMeetingAudio()
     }
 
     func regenerateRecap(for meetingID: UUID) async {

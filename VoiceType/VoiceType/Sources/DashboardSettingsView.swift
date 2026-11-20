@@ -4,7 +4,14 @@ import SwiftUI
 struct DashboardSettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var meetingsStore: MeetingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @State private var audioStats = MeetingsStore.AudioStorageStats(
+        meetingsWithAudioCount: 0,
+        totalBytes: 0,
+        expiredMeetingsCount: 0,
+        expiredBytes: 0
+    )
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
 
@@ -181,15 +188,7 @@ struct DashboardSettingsView: View {
 
                     Divider().overlay(theme.border)
 
-                    settingRow(
-                        "Сохранять аудиозаписи",
-                        caption: "Если выключено, временные аудиофайлы удаляются после успешной расшифровки."
-                    ) {
-                        Toggle("", isOn: $settings.keepMeetingAudio)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .tint(theme.accent)
-                    }
+                    audioRetentionRow
                 }
 
                 settingsCard("Разрешения macOS") {
@@ -274,6 +273,80 @@ struct DashboardSettingsView: View {
             } else {
                 appState.refreshPermissionsAndHotkey()
             }
+            refreshAudioStats()
+        }
+        .onChange(of: settings.meetingAudioRetention) { _, _ in
+            refreshAudioStats()
+        }
+        .onChange(of: meetingsStore.meetings) { _, _ in
+            refreshAudioStats()
+        }
+    }
+
+    private var audioRetentionRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 16) {
+                settingLabel(
+                    "Хранение аудиозаписей",
+                    caption: "Оригиналы аудио встреч автоматически удаляются по истечении срока (рекап и транскрипт сохраняются). Записи в очереди и с ошибкой не удаляются."
+                )
+                Spacer(minLength: 8)
+                Picker("", selection: $settings.meetingAudioRetention) {
+                    ForEach(MeetingAudioRetention.allCases) { retention in
+                        Text(retention.rawValue).tag(retention)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220)
+            }
+
+            HStack(spacing: 10) {
+                if audioStats.totalBytes > 0 {
+                    Label(
+                        "На диске: \(formattedBytes(audioStats.totalBytes)) (\(meetingsCountLabel(audioStats.meetingsWithAudioCount)))",
+                        systemImage: "waveform"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(theme.secondaryInk)
+                } else {
+                    Label("Сохранённых аудиофайлов нет", systemImage: "checkmark.circle")
+                        .font(.caption2)
+                        .foregroundStyle(theme.secondaryInk)
+                }
+
+                Spacer(minLength: 8)
+
+                if audioStats.expiredMeetingsCount > 0 {
+                    Button("Очистить устаревшие (\(formattedBytes(audioStats.expiredBytes)))") {
+                        appState.cleanupExpiredMeetingAudio()
+                        refreshAudioStats()
+                    }
+                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private func refreshAudioStats() {
+        audioStats = meetingsStore.audioStorageStats(retention: settings.meetingAudioRetention)
+    }
+
+    private func formattedBytes(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private func meetingsCountLabel(_ count: Int) -> String {
+        let mod100 = count % 100
+        let mod10 = count % 10
+        if mod100 >= 11 && mod100 <= 14 {
+            return "\(count) встреч"
+        }
+        switch mod10 {
+        case 1: return "\(count) встреча"
+        case 2, 3, 4: return "\(count) встречи"
+        default: return "\(count) встреч"
         }
     }
 

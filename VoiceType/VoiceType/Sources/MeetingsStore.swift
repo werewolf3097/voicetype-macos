@@ -261,6 +261,105 @@ final class MeetingsStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
+    struct AudioStorageStats: Equatable {
+        let meetingsWithAudioCount: Int
+        let totalBytes: Int64
+        let expiredMeetingsCount: Int
+        let expiredBytes: Int64
+    }
+
+    private func existingAudioFileURLs(for meeting: MeetingRecord) -> [URL] {
+        let dir = baseDirectory.appendingPathComponent(meeting.id.uuidString, isDirectory: true)
+        guard FileManager.default.fileExists(atPath: dir.path) else { return [] }
+        var candidateNames: Set<String> = [
+            "mic.wav",
+            "sys.wav",
+            "mic_raw.wav",
+            "sys_raw.wav",
+            "stereo_gapi.wav"
+        ]
+        if let name = meeting.audioFileName, !name.isEmpty { candidateNames.insert(name) }
+        if let sysName = meeting.sysAudioFileName, !sysName.isEmpty { candidateNames.insert(sysName) }
+
+        return candidateNames.compactMap { name in
+            let url = dir.appendingPathComponent(name)
+            return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        }
+    }
+
+    private func isAudioExpired(
+        _ meeting: MeetingRecord,
+        retention: MeetingAudioRetention,
+        now: Date
+    ) -> Bool {
+        // Никогда не удаляем аудио для активных, стоящих в очереди или завершившихся с ошибкой встреч,
+        // чтобы пользователь всегда мог повторить расшифровку.
+        guard meeting.status == .ready else { return false }
+        guard let days = retention.retentionDays else { return false }
+        if days <= 0 {
+            return true
+        }
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: now)
+            ?? now.addingTimeInterval(-TimeInterval(days) * 86_400)
+        return meeting.date < cutoff
+    }
+
+    func audioStorageStats(retention: MeetingAudioRetention, now: Date = Date()) -> AudioStorageStats {
+        var meetingsWithAudioCount = 0
+        var totalBytes: Int64 = 0
+        var expiredMeetingsCount = 0
+        var expiredBytes: Int64 = 0
+
+        for meeting in meetings {
+            let urls = existingAudioFileURLs(for: meeting)
+            guard !urls.isEmpty else { continue }
+            var meetingBytes: Int64 = 0
+            for url in urls {
+                if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
+                    meetingBytes += Int64(size)
+                }
+            }
+            meetingsWithAudioCount += 1
+            totalBytes += meetingBytes
+            if isAudioExpired(meeting, retention: retention, now: now) {
+                expiredMeetingsCount += 1
+                expiredBytes += meetingBytes
+            }
+        }
+
+        return AudioStorageStats(
+            meetingsWithAudioCount: meetingsWithAudioCount,
+            totalBytes: totalBytes,
+            expiredMeetingsCount: expiredMeetingsCount,
+            expiredBytes: expiredBytes
+        )
+    }
+
+    @discardableResult
+    func cleanupExpiredAudio(retention: MeetingAudioRetention, now: Date = Date()) -> Int {
+        guard retention.retentionDays != nil else { return 0 }
+        var cleanedCount = 0
+
+        for idx in meetings.indices {
+            guard isAudioExpired(meetings[idx], retention: retention, now: now) else { continue }
+            let urls = existingAudioFileURLs(for: meetings[idx])
+            let hadMetadata = meetings[idx].audioFileName != nil || meetings[idx].sysAudioFileName != nil
+            guard !urls.isEmpty || hadMetadata else { continue }
+
+            for url in urls {
+                try? FileManager.default.removeItem(at: url)
+            }
+            meetings[idx].audioFileName = nil
+            meetings[idx].sysAudioFileName = nil
+            cleanedCount += 1
+        }
+
+        if cleanedCount > 0 {
+            save()
+        }
+        return cleanedCount
+    }
+
     enum ExportDestination {
         case none
         case folder(URL)
