@@ -30,17 +30,27 @@
                                     │
 [клавиша отпущена] ──▶ запись останавливается, файл готов
                                     │
-                          GapiClient.transcribe()
-                          POST /v1/transcribe → текст (узбекский, латиница)
+                  DictationTranscriptionCoordinator
+          ┌─────────────────────────┴──────────────────────────┐
+          │ (по умолчанию: выкл)                                │ (включён «Домашний сервер»)
+          ▼                                                     ▼
+ GapiTranscriptionProvider                           AudioCompressor (Opus ~24 кбит/с CAF,
+ POST console.gapi.uz/v1/transcribe                  резерв: AAC >= 48 кбит/с M4A)
+ (исходный WAV multipart)                                       │
+          │                                                     ▼
+          │                                           HomeServerProvider
+          │                                           POST /v1/transcribe?engine=...&lang=...&fallback=...
+          │                                           (Tailscale, connect-таймаут 3 с)
+          │                                                     │
+          │                      (Tailscale выкл / 502 / таймаут) ──▶ автопереход на Gapi + уведомление
+          └─────────────────────────┬──────────────────────────┘
+                                    ▼
+                        HistoryStore (history.json: +engine, +latencyMs)
                                     │
-                    (если задан ключ Claude и стиль ≠ «без обработки»)
-                          ClaudeClient.cleanup()
-                          POST /v1/messages → причёсанный текст
-                                    │
-                          TextInjector
-                    копия в буфер обмена всегда; если включена автовставка —
-              сначала проверяется, есть ли под курсором поле, куда можно вставить
-             (Accessibility API), и только тогда шлётся синтетический ⌘V
+                              TextInjector
+                     копия в буфер обмена всегда; если включена автовставка —
+               сначала проверяется, есть ли под курсором поле, куда можно вставить
+              (Accessibility API), и только тогда шлётся синтетический ⌘V
 ```
 
 Всё происходит асинхронно на фоне; статус (запись / распознавание / обработка / ошибка)
@@ -69,15 +79,18 @@ VoiceType/                      ← эта папка, "рядом с проек
         │   └── Info.plist       ← сгенерирован XcodeGen (NSMicrophoneUsageDescription, LSUIElement: false)
         └── Sources/
             ├── VoiceTypeApp.swift     — точка входа, MenuBarExtra + Settings-сцена
-            ├── AppState.swift        — оркестрация: запись → gapi → Claude → вставка
+            ├── AppState.swift        — оркестрация: запись → провайдер диктовки / встречи → вставка
             ├── AudioRecorder.swift   — запись в WAV через AVAudioRecorder
+            ├── AudioCompressor.swift — сжатие диктовки в Opus ~24 кбит/с (CAF) / AAC >= 48 кбит/с (M4A) для домашнего шлюза
+            ├── TranscriptionProvider.swift — протокол TranscriptionProvider, GapiTranscriptionProvider и координатор fallback
+            ├── HomeServerProvider.swift — клиент домашнего шлюза (Parakeet/Whisper/Gapi, connect-таймаут 3 с, /v1/health)
             ├── HotkeyManager.swift   — глобальный push-to-talk хоткей (CGEventTap)
             ├── GapiClient.swift      — клиент gapi (транскрибация речи + словарь проекта)
-            ├── ClaudeClient.swift    — клиент Anthropic Messages API (очистка текста)
+            ├── ClaudeClient.swift    — клиент Anthropic Messages API (очистка текста и рекапы)
             ├── TextInjector.swift    — буфер обмена + проверка поля под курсором + синтетический ⌘V
-            ├── SettingsStore.swift   — настройки (хоткей, стиль очистки, автовставка, значок в Dock)
-            ├── HistoryStore.swift    — история расшифровок: чтение/запись history.json
-            ├── KeychainStore.swift   — хранение API-ключей в Keychain
+            ├── SettingsStore.swift   — настройки (хоткей, стиль очистки, домашний сервер, автовставка, значок в Dock)
+            ├── HistoryStore.swift    — история расшифровок: чтение/запись history.json (включая engine и latencyMs)
+            ├── KeychainStore.swift   — хранение API-ключей и токена шлюза в Keychain
             ├── PermissionsHelper.swift — запрос микрофона, точная проверка «Мониторинга ввода» (IOHIDCheckAccess), диплинки в System Settings
             ├── NotificationHelper.swift — push-уведомления (UNUserNotificationCenter) о проблемах с хоткеем
             ├── DockIconController.swift — показать/скрыть значок в Dock (NSApp.setActivationPolicy)
@@ -93,6 +106,38 @@ VoiceType/                      ← эта папка, "рядом с проек
 ```
 
 ## 3. Внешние сервисы
+
+### Домашний сервер (шлюз транскрибации в Tailscale)
+
+Опциональный провайдер диктовки (`HomeServerProvider.swift`), скрытый за переключателем
+**«Использовать домашний сервер»** в Настройках (по умолчанию **выключен** — старый флоу через
+`gapi.uz` остаётся без изменений).
+
+- **Эндпоинты:**
+  - `POST <baseURL>/v1/transcribe?engine=auto|parakeet|whisper|gapi&lang=auto|ru|uz|en&fallback=0|1` —
+    заголовок `Authorization: Bearer <токен>`, в теле сырое сжатое аудио.
+    Ответ `200`: `{"text","engine","language","seconds","audio_seconds","fallback_from"}` (и `note` для gapi вне `uz`).
+    Ошибки `{"error"}`: `400` (параметры/пустое тело), `401` (токен), `413` (>50 МБ),
+    `415` (не аудио), `422` (короче 0,2 с), `429` (>4 одновременно), `502` (все движки недоступны).
+  - `GET <baseURL>/v1/health` (с Bearer-токеном) → `{"ok", "engines": {"parakeet", "whisper", "gapi"}}` —
+    используется кнопкой **«Проверить соединение»** в Настройках.
+- **Выбор движка:**
+  - **Авто (рекомендуется)** (`engine=auto`, `fallback=1`): при `lang=uz` идёт в Gapi; иначе каскад `Parakeet → Whisper → Gapi`.
+  - **Быстро — Parakeet** (`engine=parakeet`, `fallback=0`): ~1 с на круг (русский и английский со знаками препинания).
+  - **Точно — Whisper** (`engine=whisper`, `fallback=0`): Whisper large-v3-turbo (~5–6 с, выше точность чисел/терминов).
+  - **Узбекский — Gapi** (`engine=gapi`, `fallback=0`).
+- **Сжатие аудио (`AudioCompressor.swift`):** для экономии домашнего исходящего канала (~1 Мбит/с)
+  WAV 16 kHz mono перед отправкой на шлюз сжимается через `AVAudioConverter` в **Opus ~24 кбит/с**
+  в компактный CAF (без page-align padding, ~14 КБ на 5 с речи; время кодирования ~25 мс).
+  При ошибке Opus-кодера включается резервное кодирование в **AAC/M4A 64 кбит/с** (не ниже 48 кбит/с).
+  В системные логи (`os.Logger`) пишутся только кодек, размеры и время кодирования — без аудио и текста.
+  Для прямого `GapiClient` формат отправки не меняется (WAV).
+- **Отказоустойчивость (fallback):** для подключения к шлюзу выставлен connect-таймаут **3 с**
+  (при этом длинный ответ Whisper после установки соединения не обрывается). Если шлюз недоступен
+  (Tailscale выключен, сетевая ошибка, таймаут или HTTP `502`) и в настройках задан токен gapi,
+  `DictationTranscriptionCoordinator` автоматически отправляет исходный WAV в `gapi.uz` и показывает
+  короткое уведомление через `NotificationHelper`. Клиентские ошибки (`401`, `422`, `429`) не
+  маскируются fallback'ом и показываются напрямую.
 
 ### gapi (console.gapi.uz) — распознавание речи
 
@@ -119,9 +164,11 @@ VoiceType/                      ← эта папка, "рядом с проек
 
 ## 4. Хранение секретов
 
-Оба ключа (gapi, Anthropic) хранятся через `KeychainStore.swift` — обёртку над `Security`
-framework (generic password items), не в `UserDefaults` и не в исходниках. Несекретные
-настройки (выбранный хоткей, стиль очистки, автовставка вкл/выкл, значок в Dock) — в `UserDefaults`.
+Все секреты (`gapiToken`, `anthropicApiKey`, `homeServerToken`) хранятся исключительно через
+`KeychainStore.swift` — обёртку над `Security` framework (generic password items), никогда не
+пишутся в `UserDefaults`, логи или исходники. Несекретные настройки (хоткей, стиль очистки,
+автовставка, адрес/режим/язык домашнего сервера, значок в Dock) хранятся в `UserDefaults`.
+В текстах ошибок и системных логах никогда не выводятся Bearer-токен и расшифрованный текст диктовки.
 
 ## 5. Значок в Dock
 
@@ -150,9 +197,9 @@ AppKit-меню вне SwiftUI-иерархии, `\.openSettings` там нед�
 |---|---|---|
 | **Главная** | Текущий статус (готов/запись/распознавание/ошибка), карточка последней расшифровки, кнопка «Скопировать снова», подсказка по хоткею и активному стилю очистки | `AppState.status`, `HistoryStore.records.first`, `SettingsStore` |
 | **Главная → плитки статистики** | «Расшифровок» (count), «Слов надиктовано» (сумма слов по истории), «Средняя скорость» (слов/мин — только если есть записи с известной длительностью), «Активных дней» (число уникальных дат в истории) | Считается на лету из `HistoryStore.records`, ничего не хранится отдельно |
-| **История** | Список всех расшифровок с датой, числом слов и длительностью записи; удаление всей истории | `HistoryStore` → `~/Library/Application Support/VoiceType/history.json`, до 200 записей, только на этом Mac |
+| **История** | Список всех расшифровок с датой, числом слов, длительностью, движком (`engine`) и задержкой (`latencyMs`); удаление всей истории | `HistoryStore` → `~/Library/Application Support/VoiceType/history.json` (обратно совместимая миграция старых записей), до 200 записей, только на этом Mac |
 | **Словарь** | Термины словаря проекта gapi (компании, продукты, имена) — добавление и удаление с сохранением на сервер | `GET`/`PUT https://console.gapi.uz/v1/vocabulary` через `GapiClient`, требует токен gapi |
-| **Настройки** | Ключи API, хоткей, стиль очистки, автовставка, значок в Dock, статус разрешений | `SettingsStore`, `PermissionsHelper` |
+| **Настройки** | Ключи API, домашний сервер (тумблер, URL, токен в Keychain, режим, подсказка языка, кнопка «Проверить соединение»), хоткей, стиль очистки, автовставка, значок в Dock, статус разрешений | `SettingsStore`, `HomeServerProvider`, `PermissionsHelper` |
 
 Сознательно не скопированы декоративные/неприменимые к этому проекту элементы из
 референса (Typeless): «Сэкономленное время», серии/heatmap активности, квота слов
@@ -238,7 +285,15 @@ AppKit-меню вне SwiftUI-иерархии, `\.openSettings` там нед�
 
 - Разработка: `xcodegen generate && open VoiceType.xcodeproj`, запуск через Xcode (⌘R).
 - Готовый `.app`: `./VoiceType/build-app.sh` — собирает Release, кладёт `VoiceType.app`
-  рядом с папкой проекта (то есть сюда же, в `~/Desktop/VoiceType/`).
+  рядом с папкой проекта.
+- Юнит-тесты (выбор движка, разбор ответов/ошибок, сжатие аудио, fallback, миграция `history.json`, локальный мок шлюза):
+  ```bash
+  cd VoiceType && xcodegen generate && xcodebuild -project VoiceType.xcodeproj -scheme VoiceType test CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO
+  ```
+- Бенчмарк 20 запросов к живому домашнему шлюзу (русская фраза ~5 с, режим «Авто», p50/p95; токен берётся только из `VOICE_GATEWAY_TOKEN`):
+  ```bash
+  VOICE_GATEWAY_TOKEN="..." bash VoiceType/scripts/benchmark-gateway.sh
+  ```
 
 **Особенность этой машины:** рабочий стол синхронизируется через iCloud («Рабочий стол и
 Документы»), а iCloud на лету навешивает на файлы служебные расширенные атрибуты, которые
@@ -287,6 +342,25 @@ Windows — по объёму сравним с текущим macOS MVP; реа
 ## 11. Changelog
 
 Коротко и по фактам — что изменилось и почему. Новые записи — сверху.
+
+### 2026-11-20
+
+- **Подключён провайдер «Домашний сервер» (`HomeServerProvider`)** через минимальную абстракцию
+  `TranscriptionProvider` + `DictationTranscriptionCoordinator` без изменения поведения `gapi.uz`.
+  Фича вынесена за переключатель в Настройках и по умолчанию выключена.
+- **Сжатие аудио для шлюза (`AudioCompressor`):** запись WAV 16 kHz mono кодируется через
+  `AVAudioConverter` в Opus ~24 кбит/с (компактный CAF) с резервным AAC/M4A 64 кбит/с; в логи
+  пишутся только размер и время кодирования, без содержимого.
+- **Настройки домашнего сервера:** адрес, токен исключительно в Keychain (`homeServerToken`),
+  режим («Авто (рекомендуется)» / «Быстро — Parakeet» / «Точно — Whisper» / «Узбекский — Gapi»),
+  подсказка языка и кнопка «Проверить соединение» (`GET /v1/health`).
+- **Автоматический fallback на Gapi:** connect-таймаут 3 с (без обрыва долгих ответов Whisper),
+  при недоступности шлюза (Tailscale выкл, 502 или таймаут) автоматическая отправка исходного WAV
+  в `gapi.uz` с коротким уведомлением.
+- **История (`history.json`):** добавлены опциональные поля `engine` и `latencyMs` с обратно
+  совместимой миграцией без потери записей; отображаются в списке истории и карточке последней диктовки.
+- **Юнит-тесты и бенчмарк:** добавлен таргет `VoiceTypeTests` с локальным HTTP-моком шлюза
+  (`MockGatewayServer`) и скрипт `VoiceType/scripts/benchmark-gateway.sh`.
 
 ### 2026-09-23
 

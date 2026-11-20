@@ -438,6 +438,17 @@ struct DashboardHomeView: View {
                             .background(theme.accentSoft, in: Capsule())
                     }
 
+                    if let engine = last.engine, !engine.isEmpty {
+                        let label = last.formattedLatency.map { "\(engine) · \($0)" } ?? engine
+                        Text(label)
+                            .font(ClaudeFonts.microMedium.monospacedDigit())
+                            .foregroundStyle(theme.secondaryInk)
+                            .lineLimit(1)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(theme.surfaceSubtle, in: Capsule())
+                    }
+
                     Spacer()
 
                     Text(last.date, format: .dateTime.day().month().hour().minute())

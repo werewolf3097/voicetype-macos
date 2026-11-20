@@ -16,6 +16,7 @@ struct DashboardHistoryView: View {
         return history.records.filter {
             $0.text.lowercased().contains(q)
                 || ($0.languageSummary?.lowercased().contains(q) ?? false)
+                || ($0.engine?.lowercased().contains(q) ?? false)
         }
     }
 
@@ -127,6 +128,15 @@ struct DashboardHistoryView: View {
                                             Text("·")
                                             Text(lang)
                                                 .foregroundStyle(theme.accentInk)
+                                        }
+                                        if let engine = record.engine, !engine.isEmpty {
+                                            Text("·")
+                                            Text(engine)
+                                        }
+                                        if let latency = record.formattedLatency {
+                                            Text("·")
+                                            Text(latency)
+                                                .monospacedDigit()
                                         }
                                     }
                                     .font(ClaudeFonts.small)

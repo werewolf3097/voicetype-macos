@@ -6,12 +6,20 @@ struct DashboardSettingsView: View {
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var meetingsStore: MeetingsStore
     @Environment(\.colorScheme) private var colorScheme
+    private enum HomeServerCheckState: Equatable {
+        case idle
+        case checking
+        case success(String)
+        case failure(String)
+    }
+
     @State private var audioStats = MeetingsStore.AudioStorageStats(
         meetingsWithAudioCount: 0,
         totalBytes: 0,
         expiredMeetingsCount: 0,
         expiredBytes: 0
     )
+    @State private var homeServerCheckState: HomeServerCheckState = .idle
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
 
@@ -49,6 +57,8 @@ struct DashboardSettingsView: View {
                             .frame(minWidth: 180, maxWidth: 280)
                     }
                 }
+
+                homeServerSettingsCard
 
                 settingsCard("Приложение") {
                     settingRow(
@@ -281,6 +291,155 @@ struct DashboardSettingsView: View {
         }
         .onChange(of: meetingsStore.meetings) { _, _ in
             refreshAudioStats()
+        }
+    }
+
+    private var homeServerSettingsCard: some View {
+        settingsCard("Домашний сервер (шлюз диктовки)") {
+            settingRow(
+                "Использовать домашний сервер",
+                caption: "Отправляет сжатое аудио (Opus 24 кбит/с) на шлюз в Tailscale. При недоступности за 3 с автоматически переключается на gapi.uz."
+            ) {
+                Toggle("", isOn: $settings.useHomeServer)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(theme.accent)
+            }
+
+            Divider().overlay(theme.border)
+
+            settingRow(
+                "Адрес шлюза",
+                caption: "Например: http://100.79.78.37:8790"
+            ) {
+                TextField(HomeServerConfig.defaultURLString, text: $settings.homeServerURL)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 180, maxWidth: 280)
+                    .onChange(of: settings.homeServerURL) { _, _ in
+                        homeServerCheckState = .idle
+                    }
+            }
+
+            Divider().overlay(theme.border)
+
+            settingRow(
+                "Токен авторизации",
+                caption: "Хранится только в macOS Keychain, не сохраняется в настройках и логах."
+            ) {
+                SecureField("Bearer-токен шлюза", text: $settings.homeServerToken)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 180, maxWidth: 280)
+                    .onChange(of: settings.homeServerToken) { _, _ in
+                        homeServerCheckState = .idle
+                    }
+            }
+
+            Divider().overlay(theme.border)
+
+            settingRow(
+                "Режим распознавания",
+                caption: "«Авто» выбирает Gapi для узбекского и Parakeet → Whisper → Gapi для русского и английского."
+            ) {
+                Picker("", selection: $settings.homeServerEngine) {
+                    ForEach(HomeServerEngine.allCases) { engine in
+                        Text(engine.displayName).tag(engine)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220)
+            }
+
+            Divider().overlay(theme.border)
+
+            settingRow(
+                "Подсказка языка",
+                caption: "Передаётся в параметр lang шлюза (auto, ru, uz, en)."
+            ) {
+                Picker("", selection: $settings.homeServerLanguage) {
+                    ForEach(HomeServerLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220)
+            }
+
+            Divider().overlay(theme.border)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 16) {
+                    settingLabel(
+                        "Проверка соединения",
+                        caption: "Запрос GET /v1/health с проверкой токена и доступных движков."
+                    )
+                    Spacer(minLength: 8)
+                    Button {
+                        checkHomeServerConnection()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if case .checking = homeServerCheckState {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text("Проверить соединение")
+                        }
+                    }
+                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                    .disabled(homeServerCheckState == .checking)
+                }
+
+                homeServerCheckStatusView
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+    }
+
+    @ViewBuilder
+    private var homeServerCheckStatusView: some View {
+        switch homeServerCheckState {
+        case .idle:
+            EmptyView()
+        case .checking:
+            HStack(spacing: 5) {
+                ClaudeIcon(name: "network", size: 10.5, weight: .light)
+                Text("Подключаюсь к шлюзу…")
+                    .font(ClaudeFonts.micro)
+            }
+            .foregroundStyle(theme.secondaryInk)
+        case .success(let summary):
+            HStack(spacing: 5) {
+                ClaudeIcon(name: "checkmark.circle", size: 10.5, weight: .light)
+                Text(summary)
+                    .font(ClaudeFonts.micro)
+            }
+            .foregroundStyle(theme.success)
+        case .failure(let message):
+            HStack(spacing: 5) {
+                ClaudeIcon(name: "exclamationmark.triangle", size: 10.5, weight: .light)
+                Text(message)
+                    .font(ClaudeFonts.micro)
+            }
+            .foregroundStyle(theme.warning)
+        }
+    }
+
+    private func checkHomeServerConnection() {
+        homeServerCheckState = .checking
+        let config = settings.homeServerConfig
+        Task {
+            do {
+                let health = try await HomeServerProvider(config: config).checkHealth()
+                let available = health.availableEngines
+                let enginesText = available.isEmpty ? "нет активных движков" : available.joined(separator: ", ")
+                if health.ok {
+                    homeServerCheckState = .success("Подключено (\(health.latencyMs) мс) · движки: \(enginesText)")
+                } else {
+                    homeServerCheckState = .failure("Шлюз ответил ok=false (\(health.latencyMs) мс) · движки: \(enginesText)")
+                }
+            } catch {
+                homeServerCheckState = .failure(error.localizedDescription)
+            }
         }
     }
 

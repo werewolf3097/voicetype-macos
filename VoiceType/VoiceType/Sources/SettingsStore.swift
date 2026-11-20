@@ -138,12 +138,33 @@ final class SettingsStore: ObservableObject {
     @Published var exportDestination: String {
         didSet { UserDefaults.standard.set(exportDestination, forKey: "exportDestination") }
     }
+    @Published var useHomeServer: Bool {
+        didSet { UserDefaults.standard.set(useHomeServer, forKey: "useHomeServer") }
+    }
+    @Published var homeServerURL: String {
+        didSet { UserDefaults.standard.set(homeServerURL, forKey: "homeServerURL") }
+    }
+    @Published var homeServerEngine: HomeServerEngine {
+        didSet { UserDefaults.standard.set(homeServerEngine.rawValue, forKey: "homeServerEngine") }
+    }
+    @Published var homeServerLanguage: HomeServerLanguage {
+        didSet { UserDefaults.standard.set(homeServerLanguage.rawValue, forKey: "homeServerLanguage") }
+    }
 
     @Published var gapiToken: String {
         didSet { KeychainStore.set(gapiToken, forKey: "gapiToken") }
     }
     @Published var anthropicApiKey: String {
         didSet { KeychainStore.set(anthropicApiKey, forKey: "anthropicApiKey") }
+    }
+    @Published var homeServerToken: String {
+        didSet {
+            if homeServerToken.isEmpty {
+                KeychainStore.delete("homeServerToken")
+            } else {
+                KeychainStore.set(homeServerToken, forKey: "homeServerToken")
+            }
+        }
     }
 
     var keepMeetingAudio: Bool {
@@ -156,6 +177,15 @@ final class SettingsStore: ObservableObject {
 
     var hasExportDestination: Bool {
         !exportDestination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var homeServerConfig: HomeServerConfig {
+        HomeServerConfig(
+            baseURLString: homeServerURL,
+            token: homeServerToken,
+            engine: homeServerEngine,
+            language: homeServerLanguage
+        )
     }
 
     init() {
@@ -181,8 +211,13 @@ final class SettingsStore: ObservableObject {
         self.exportDestination = defaults.string(forKey: "exportDestination")
             ?? defaults.string(forKey: "obsidianRecapsFolder")
             ?? ""
+        self.useHomeServer = defaults.object(forKey: "useHomeServer") as? Bool ?? false
+        self.homeServerURL = defaults.string(forKey: "homeServerURL") ?? HomeServerConfig.defaultURLString
+        self.homeServerEngine = HomeServerEngine(rawValue: defaults.string(forKey: "homeServerEngine") ?? "") ?? .auto
+        self.homeServerLanguage = HomeServerLanguage(rawValue: defaults.string(forKey: "homeServerLanguage") ?? "") ?? .auto
         self.gapiToken = KeychainStore.get("gapiToken") ?? ""
         self.anthropicApiKey = KeychainStore.get("anthropicApiKey") ?? ""
+        self.homeServerToken = KeychainStore.get("homeServerToken") ?? ""
         DockIconController.apply(visible: self.showDockIcon)
     }
 }
