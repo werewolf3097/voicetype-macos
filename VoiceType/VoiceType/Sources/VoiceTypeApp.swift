@@ -8,6 +8,7 @@ struct VoiceTypeApp: App {
     @StateObject private var appState: AppState
 
     init() {
+        ClaudeFonts.registerBundledFonts()
         let settingsStore = SettingsStore()
         let historyStore = HistoryStore()
         let state = AppState(settings: settingsStore, history: historyStore)

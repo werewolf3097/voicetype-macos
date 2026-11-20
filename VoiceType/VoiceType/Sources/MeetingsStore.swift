@@ -12,11 +12,11 @@ enum MeetingTemplate: String, CaseIterable, Identifiable, Codable {
 
     var systemImage: String {
         switch self {
-        case .general: return "person.3"
+        case .general: return "doc.text"
         case .oneOnOne: return "person.2"
-        case .standup: return "bolt.horizontal"
+        case .standup: return "bolt"
         case .sales: return "briefcase"
-        case .interview: return "person.text.rectangle"
+        case .interview: return "person.crop.rectangle"
         }
     }
 

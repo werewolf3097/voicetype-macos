@@ -1,5 +1,73 @@
 import AppKit
+import CoreText
 import SwiftUI
+
+enum ClaudeFonts {
+    private static var registered = false
+
+    static func registerBundledFonts() {
+        guard !registered else { return }
+        registered = true
+
+        let candidates: [URL] = [
+            Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: "Fonts") ?? [],
+            Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? []
+        ].flatMap { $0 }
+
+        for url in candidates {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+    }
+
+    // MARK: - Display / Headings ONLY (New Balance & Granola editorial serif — Cormorant Garamond)
+
+    /// Главный заголовок на Home («Говорите, не печатайте»)
+    static let heroTitle: Font = .custom("CormorantGaramond-Medium", size: 32)
+    /// Заголовки разделов («История диктовок», «Словарь терминов», «Настройки», пустое состояние встреч)
+    static let pageTitle: Font = .custom("CormorantGaramond-Medium", size: 28)
+    /// Заголовок открытой или записываемой встречи
+    static let meetingTitle: Font = .custom("CormorantGaramond-Medium", size: 25)
+    /// Заголовок колонки списка («Встречи»)
+    static let panelTitle: Font = .custom("CormorantGaramond-Medium", size: 21)
+    /// Заголовки # и ## внутри сгенерированного рекапа
+    static let recapH1: Font = .custom("CormorantGaramond-SemiBold", size: 22)
+    static let recapH2: Font = .custom("CormorantGaramond-SemiBold", size: 18.5)
+    /// Крупные цифры статистики (как число дня в календаре Granola)
+    static let statNumber: Font = .custom("CormorantGaramond-Regular", size: 26)
+
+    // MARK: - Compact UI & Body (Granola-scale small, crisp Inter)
+
+    /// Основной текст (рекап, заметки, история диктовок, поле ввода)
+    static let body: Font = .custom("Inter-Regular", size: 12.5)
+    static let bodyMedium: Font = .custom("Inter-Regular_Medium", size: 12.5)
+    /// Интерфейсные строки (навигация, названия встреч в списке, названия настроек)
+    static let ui: Font = .custom("Inter-Regular", size: 12)
+    static let uiMedium: Font = .custom("Inter-Regular_Medium", size: 12)
+    static let uiSemibold: Font = .custom("Inter-Regular_SemiBold", size: 12)
+    /// Мелкие подписи, фильтры, кнопки, чипы, подсказки
+    static let small: Font = .custom("Inter-Regular", size: 11)
+    static let smallMedium: Font = .custom("Inter-Regular_Medium", size: 11)
+    static let smallSemibold: Font = .custom("Inter-Regular_SemiBold", size: 11)
+    /// Микро-метаданные, таймстампы, бейджи, заголовки групп
+    static let micro: Font = .custom("Inter-Regular", size: 10)
+    static let microMedium: Font = .custom("Inter-Regular_Medium", size: 10)
+    static let microSemibold: Font = .custom("Inter-Regular_SemiBold", size: 10)
+    /// Моноширинный (редактор Markdown)
+    static let mono: Font = .system(size: 12, design: .monospaced)
+}
+
+/// Тонкие линейные монохромные иконки в эстетике Granola и New Balance (Lucide / Phosphor-штрих).
+struct ClaudeIcon: View {
+    let name: String
+    var size: CGFloat = 13
+    var weight: Font.Weight = .light
+
+    var body: some View {
+        Image(systemName: name)
+            .font(.system(size: size, weight: weight))
+            .symbolRenderingMode(.monochrome)
+    }
+}
 
 struct ClaudeTheme {
     let scheme: ColorScheme
@@ -31,13 +99,13 @@ struct ClaudeTheme {
     var hoverFill: Color {
         scheme == .dark
             ? Color.white.opacity(0.13)
-            : Color(red: 0.14, green: 0.12, blue: 0.09).opacity(0.12)
+            : Color(red: 0.14, green: 0.12, blue: 0.09).opacity(0.09)
     }
 
     var selectedFill: Color {
         scheme == .dark
-            ? Color.white.opacity(0.18)
-            : Color(red: 0.816, green: 0.800, blue: 0.765) // #D0CCC3
+            ? Color.white.opacity(0.16)
+            : Color(red: 0.875, green: 0.863, blue: 0.835) // #DFDCD5 (refined stone)
     }
 
     var ink: Color {
@@ -113,7 +181,7 @@ struct ClaudeTheme {
     var cardShadow: Color {
         scheme == .dark
             ? Color.black.opacity(0.28)
-            : Color.black.opacity(0.04)
+            : Color.black.opacity(0.035)
     }
 
     static let windowBackgroundNSColor = NSColor(name: "ClaudeWindowCanvas") { appearance in
@@ -135,14 +203,14 @@ struct ClaudePrimaryButtonStyle: ButtonStyle {
         let theme = ClaudeTheme(scheme: colorScheme)
         let baseColor = tintColor ?? theme.accent
         configuration.label
-            .font(compact ? .caption.weight(.semibold) : .callout.weight(.semibold))
+            .font(compact ? ClaudeFonts.smallMedium : ClaudeFonts.uiMedium)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: true)
             .foregroundStyle(Color.white)
-            .padding(.horizontal, compact ? 11 : 14)
-            .padding(.vertical, compact ? 5 : 8)
+            .padding(.horizontal, compact ? 10 : 13)
+            .padding(.vertical, compact ? 5 : 7)
             .background(
-                RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous)
+                RoundedRectangle(cornerRadius: compact ? 7 : 8, style: .continuous)
                     .fill(configuration.isPressed ? baseColor.opacity(0.86) : baseColor)
             )
             .opacity(isEnabled ? 1 : 0.45)
@@ -160,18 +228,18 @@ struct ClaudeSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let theme = ClaudeTheme(scheme: colorScheme)
         configuration.label
-            .font(compact ? .caption.weight(.medium) : .callout.weight(.medium))
+            .font(compact ? ClaudeFonts.smallMedium : ClaudeFonts.uiMedium)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: true)
             .foregroundStyle(isDestructive ? theme.danger : theme.ink)
-            .padding(.horizontal, compact ? 10 : 12)
-            .padding(.vertical, compact ? 5 : 7)
+            .padding(.horizontal, compact ? 9 : 11)
+            .padding(.vertical, compact ? 4.5 : 6.5)
             .background(
-                RoundedRectangle(cornerRadius: compact ? 7 : 9, style: .continuous)
+                RoundedRectangle(cornerRadius: compact ? 7 : 8, style: .continuous)
                     .fill(configuration.isPressed ? theme.selectedFill : theme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: compact ? 7 : 9, style: .continuous)
+                RoundedRectangle(cornerRadius: compact ? 7 : 8, style: .continuous)
                     .strokeBorder(theme.border, lineWidth: 1)
             )
             .opacity(isEnabled ? 1 : 0.45)

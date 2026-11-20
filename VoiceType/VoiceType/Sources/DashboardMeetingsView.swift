@@ -147,10 +147,11 @@ struct DashboardMeetingsView: View {
 
     private var meetingsListColumn: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 10) {
+            VStack(spacing: 9) {
                 HStack(spacing: 8) {
                     Text("Встречи")
-                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .font(ClaudeFonts.panelTitle)
+                        .tracking(-0.25)
                         .foregroundStyle(theme.ink)
                         .lineLimit(1)
                     Spacer()
@@ -164,7 +165,7 @@ struct DashboardMeetingsView: View {
                             }
                         } label: {
                             HStack(spacing: 4) {
-                                Image(systemName: "plus")
+                                ClaudeIcon(name: "plus", size: 10.5, weight: .regular)
                                 Text("Новая")
                             }
                         }
@@ -185,34 +186,32 @@ struct DashboardMeetingsView: View {
                 }
 
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
+                    ClaudeIcon(name: "magnifyingglass", size: 11, weight: .light)
                         .foregroundStyle(theme.secondaryInk)
-                        .font(.caption)
                     TextField("Поиск по встречам…", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(.callout)
+                        .font(ClaudeFonts.ui)
                         .foregroundStyle(theme.ink)
                     if !searchQuery.isEmpty {
                         Button {
                             searchQuery = ""
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
+                            ClaudeIcon(name: "xmark", size: 9.5, weight: .regular)
                                 .foregroundStyle(theme.secondaryInk)
-                                .font(.caption)
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.vertical, 5.5)
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 7.5, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7.5, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
             }
             .padding(.horizontal, 12)
-            .padding(.top, 14)
+            .padding(.top, 12)
             .padding(.bottom, 10)
 
             Divider().overlay(theme.border)
@@ -220,15 +219,14 @@ struct DashboardMeetingsView: View {
             if filteredMeetings.isEmpty {
                 VStack(spacing: 8) {
                     Spacer()
-                    Image(systemName: searchQuery.isEmpty ? "person.2.wave.2" : "magnifyingglass")
-                        .font(.system(size: 26))
+                    ClaudeIcon(name: searchQuery.isEmpty ? "person.2" : "magnifyingglass", size: 22, weight: .ultraLight)
                         .foregroundStyle(theme.tertiaryInk)
                     Text(searchQuery.isEmpty ? "Пока нет встреч" : "Ничего не найдено")
-                        .font(.callout.weight(.medium))
+                        .font(ClaudeFonts.uiMedium)
                         .foregroundStyle(theme.secondaryInk)
                     if searchQuery.isEmpty {
                         Text("Нажмите «Новая» для старта записи")
-                            .font(.caption)
+                            .font(ClaudeFonts.small)
                             .foregroundStyle(theme.tertiaryInk)
                     }
                     Spacer()
@@ -236,7 +234,7 @@ struct DashboardMeetingsView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 3) {
+                    LazyVStack(spacing: 2) {
                         ForEach(filteredMeetings) { meeting in
                             meetingRow(meeting)
                         }
@@ -255,35 +253,46 @@ struct DashboardMeetingsView: View {
         return Button {
             appState.selectedMeetingID = meeting.id
         } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+            HStack(alignment: .center, spacing: 9) {
+                // Granola-style soft rounded-square icon tile
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                        .fill(isSelected ? theme.surface.opacity(0.85) : theme.surfaceSubtle)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                                .strokeBorder(theme.border.opacity(0.65), lineWidth: 0.75)
+                        )
                     statusIcon(for: meeting.status)
+                }
+                .frame(width: 26, height: 26)
+
+                VStack(alignment: .leading, spacing: 2) {
                     Text(meeting.title)
-                        .font(.callout.weight(isSelected ? .semibold : .medium))
+                        .font(isSelected ? ClaudeFonts.uiMedium : ClaudeFonts.ui)
                         .foregroundStyle(theme.ink)
                         .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
 
-                HStack(spacing: 5) {
-                    Text(Self.shortDateFormatter.string(from: meeting.date))
-                    Text("·")
-                    Text(meeting.template.rawValue)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    if meeting.durationSeconds > 0 {
-                        Text(MeetingRecord.formatTimestamp(meeting.durationSeconds))
-                            .monospacedDigit()
+                    HStack(spacing: 4) {
+                        Text(Self.shortDateFormatter.string(from: meeting.date))
+                        Text("·")
+                        Text(meeting.template.rawValue)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if meeting.durationSeconds > 0 {
+                            Text(MeetingRecord.formatTimestamp(meeting.durationSeconds))
+                                .monospacedDigit()
+                                .foregroundStyle(theme.tertiaryInk)
+                        }
                     }
+                    .font(ClaudeFonts.micro)
+                    .foregroundStyle(theme.secondaryInk)
                 }
-                .font(.caption2)
-                .foregroundStyle(theme.secondaryInk)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6.5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isSelected ? theme.selectedFill : (isHovered ? theme.hoverFill : Color.clear))
             )
             .contentShape(Rectangle())
@@ -319,19 +328,16 @@ struct DashboardMeetingsView: View {
                 .fill(theme.danger)
                 .frame(width: 7, height: 7)
         case .queued:
-            Image(systemName: "clock.fill")
-                .font(.caption2)
+            ClaudeIcon(name: "clock", size: 11.5, weight: .light)
                 .foregroundStyle(theme.warning)
         case .transcribing, .summarizing:
             ProgressView()
                 .controlSize(.mini)
         case .ready:
-            Image(systemName: "doc.text")
-                .font(.caption2)
+            ClaudeIcon(name: "doc", size: 11.5, weight: .light)
                 .foregroundStyle(theme.secondaryInk)
         case .error:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.caption2)
+            ClaudeIcon(name: "exclamationmark.triangle", size: 11.5, weight: .light)
                 .foregroundStyle(theme.warning)
         }
     }
@@ -352,28 +358,29 @@ struct DashboardMeetingsView: View {
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 20) {
             Spacer()
 
             VStack(spacing: 10) {
-                Image(systemName: "person.2.wave.2")
-                    .font(.system(size: 30))
+                ClaudeIcon(name: "person.2", size: 22, weight: .light)
                     .foregroundStyle(theme.accent)
-                    .frame(width: 58, height: 58)
-                    .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(width: 48, height: 48)
+                    .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
 
                 Text("Заметки и рекапы встреч")
-                    .font(.system(size: 24, weight: .medium, design: .serif))
+                    .font(ClaudeFonts.pageTitle)
+                    .tracking(-0.35)
                     .foregroundStyle(theme.ink)
 
                 Text("Записывайте созвоны без ботов в Zoom, Meet или Telegram. Пишите короткие тезисы, а VoiceType разложит речь по спикерам и соберёт структурированный рекап.")
-                    .font(.callout)
+                    .font(ClaudeFonts.ui)
+                    .lineSpacing(3)
                     .foregroundStyle(theme.secondaryInk)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 460)
+                    .frame(maxWidth: 440)
             }
 
-            ClaudeFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+            ClaudeFlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
                 ForEach([MeetingTemplate.general, .oneOnOne, .standup, .sales]) { tpl in
                     Button {
                         if let id = appState.startMeeting(
@@ -384,7 +391,7 @@ struct DashboardMeetingsView: View {
                         }
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: tpl.systemImage)
+                            ClaudeIcon(name: tpl.systemImage, size: 11.5, weight: .light)
                                 .foregroundStyle(theme.accent)
                             Text(tpl.rawValue)
                         }
@@ -402,8 +409,8 @@ struct DashboardMeetingsView: View {
                     appState.selectedMeetingID = id
                 }
             } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: "record.circle.fill")
+                HStack(spacing: 6) {
+                    ClaudeIcon(name: "record.circle", size: 12.5, weight: .regular)
                     Text("Начать запись встречи")
                 }
             }
@@ -503,7 +510,8 @@ struct DashboardMeetingsView: View {
                         }
                     )
                 )
-                .font(.system(size: 24, weight: .medium, design: .serif))
+                .font(ClaudeFonts.meetingTitle)
+                .tracking(-0.3)
                 .textFieldStyle(.plain)
                 .foregroundStyle(theme.ink)
                 .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
@@ -513,7 +521,7 @@ struct DashboardMeetingsView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Живой блокнот встречи — короткие тезисы станут каркасом рекапа")
-                    .font(.caption)
+                    .font(ClaudeFonts.small)
                     .foregroundStyle(theme.secondaryInk)
 
                 TextEditor(
@@ -524,13 +532,13 @@ struct DashboardMeetingsView: View {
                         }
                     )
                 )
-                .font(.body)
+                .font(ClaudeFonts.body)
                 .foregroundStyle(theme.ink)
                 .scrollContentBackground(.hidden)
                 .padding(14)
-                .background(theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
             }
@@ -542,45 +550,54 @@ struct DashboardMeetingsView: View {
     private func liveChannelStatusBadge(for meeting: MeetingRecord) -> some View {
         if meeting.audioSource == .micAndSystem {
             if appState.activeMeetingSystemAudioCapturing {
-                Label("2 канала: Вы + Собеседники", systemImage: "speaker.wave.2.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(theme.accentInk)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(theme.accentSoft, in: Capsule())
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    ClaudeIcon(name: "speaker.wave.2", size: 11, weight: .light)
+                    Text("2 канала: Вы + Собеседники")
+                        .font(ClaudeFonts.smallMedium)
+                }
+                .foregroundStyle(theme.accentInk)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(theme.accentSoft, in: Capsule())
+                .lineLimit(1)
             } else {
-                Label("Только микрофон (нет системного звука)", systemImage: "mic.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(theme.warning)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(theme.warning.opacity(0.12), in: Capsule())
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    ClaudeIcon(name: "mic", size: 11, weight: .light)
+                    Text("Только микрофон (нет системного звука)")
+                        .font(ClaudeFonts.smallMedium)
+                }
+                .foregroundStyle(theme.warning)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(theme.warning.opacity(0.12), in: Capsule())
+                .lineLimit(1)
             }
         } else {
-            Label(meeting.audioSource.rawValue, systemImage: "mic")
-                .font(.caption)
-                .foregroundStyle(theme.secondaryInk)
-                .lineLimit(1)
+            HStack(spacing: 5) {
+                ClaudeIcon(name: "mic", size: 11, weight: .light)
+                Text(meeting.audioSource.rawValue)
+                    .font(ClaudeFonts.small)
+            }
+            .foregroundStyle(theme.secondaryInk)
+            .lineLimit(1)
         }
     }
 
     private var liveRecordingBadge: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "waveform")
+        HStack(spacing: 6) {
+            ClaudeIcon(name: "waveform", size: 12, weight: .regular)
                 .symbolEffect(.variableColor.iterative, isActive: true)
                 .foregroundStyle(theme.danger)
             Text("Запись")
-                .font(.caption.weight(.semibold))
+                .font(ClaudeFonts.smallSemibold)
                 .foregroundStyle(theme.danger)
             Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
-                .font(.caption.monospacedDigit().weight(.semibold))
+                .font(ClaudeFonts.smallSemibold.monospacedDigit())
                 .foregroundStyle(theme.ink)
         }
         .fixedSize()
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4.5)
         .background(theme.danger.opacity(0.10), in: Capsule())
     }
 
@@ -596,8 +613,8 @@ struct DashboardMeetingsView: View {
                 appState.finishMeeting()
                 detailTab = .recap
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
+                HStack(spacing: 5) {
+                    ClaudeIcon(name: "sparkles", size: 11, weight: .regular)
                     Text("Завершить и создать рекап")
                 }
             }
@@ -608,9 +625,9 @@ struct DashboardMeetingsView: View {
     // MARK: - Completed / Processing Meeting View
 
     private func completedMeetingView(_ meeting: MeetingRecord) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 13) {
             // Header: Title + fixed-size action buttons (never crush or stretch vertically)
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(alignment: .top, spacing: 10) {
                     if !showMeetingsList {
                         Button {
@@ -618,13 +635,12 @@ struct DashboardMeetingsView: View {
                                 showMeetingsList = true
                             }
                         } label: {
-                            Image(systemName: "list.bullet")
-                                .font(.caption.weight(.semibold))
+                            ClaudeIcon(name: "list.bullet", size: 12, weight: .light)
                                 .foregroundStyle(theme.secondaryInk)
-                                .frame(width: 28, height: 28)
-                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .frame(width: 26, height: 26)
+                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                                         .strokeBorder(theme.border, lineWidth: 1)
                                 )
                         }
@@ -642,7 +658,8 @@ struct DashboardMeetingsView: View {
                         ),
                         axis: .vertical
                     )
-                    .font(.system(size: 22, weight: .medium, design: .serif))
+                    .font(ClaudeFonts.meetingTitle)
+                    .tracking(-0.3)
                     .textFieldStyle(.plain)
                     .foregroundStyle(theme.ink)
                     .lineLimit(1...2)
@@ -654,15 +671,18 @@ struct DashboardMeetingsView: View {
                                 showMeetingsList.toggle()
                             }
                         } label: {
-                            Image(systemName: showMeetingsList ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(theme.secondaryInk)
-                                .frame(width: 28, height: 28)
-                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(theme.border, lineWidth: 1)
-                                )
+                            ClaudeIcon(
+                                name: showMeetingsList ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left",
+                                size: 11.5,
+                                weight: .light
+                            )
+                            .foregroundStyle(theme.secondaryInk)
+                            .frame(width: 26, height: 26)
+                            .background(theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(theme.border, lineWidth: 1)
+                            )
                         }
                         .buttonStyle(.plain)
                         .help(showMeetingsList ? "Развернуть конспект на всю ширину" : "Вернуть список встреч")
@@ -672,7 +692,7 @@ struct DashboardMeetingsView: View {
                                 copyMeetingMarkdown(meeting)
                             } label: {
                                 HStack(spacing: 5) {
-                                    Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
+                                    ClaudeIcon(name: copiedFeedback ? "checkmark" : "doc.on.doc", size: 11, weight: .light)
                                     Text(copiedFeedback ? "Скопировано" : "Копировать")
                                 }
                             }
@@ -681,7 +701,7 @@ struct DashboardMeetingsView: View {
                             Button {
                                 copyMeetingMarkdown(meeting)
                             } label: {
-                                Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
+                                ClaudeIcon(name: copiedFeedback ? "checkmark" : "doc.on.doc", size: 11, weight: .light)
                             }
                             .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
                         }
@@ -737,13 +757,12 @@ struct DashboardMeetingsView: View {
                                 Label("Удалить встречу…", systemImage: "trash")
                             }
                         } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.caption.weight(.semibold))
+                            ClaudeIcon(name: "ellipsis", size: 12, weight: .regular)
                                 .foregroundStyle(theme.ink)
-                                .frame(width: 28, height: 28)
-                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .frame(width: 26, height: 26)
+                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                                         .strokeBorder(theme.border, lineWidth: 1)
                                 )
                         }
@@ -767,26 +786,26 @@ struct DashboardMeetingsView: View {
                         meeting.stereoParties
                             ? "Стерео: Вы + Собеседники"
                             : (meeting.sysAudioFileName == nil ? "Только микрофон" : "Диаризация спикеров"),
-                        systemImage: meeting.stereoParties ? "person.2.wave.2" : "mic"
+                        systemImage: meeting.stereoParties ? "person.2" : "mic"
                     )
 
                     if let engine = meeting.transcriptionEngine, !engine.isEmpty {
                         Text(engine)
-                            .font(.caption)
+                            .font(ClaudeFonts.small)
                             .foregroundStyle(theme.secondaryInk)
                             .lineLimit(1)
                             .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
+                            .padding(.vertical, 2.5)
                             .background(theme.surfaceSubtle, in: Capsule())
                     }
 
                     if let lang = meeting.languageSummary {
                         Text(lang)
-                            .font(.caption.weight(.medium))
+                            .font(ClaudeFonts.smallMedium)
                             .foregroundStyle(theme.accentInk)
                             .lineLimit(1)
                             .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
+                            .padding(.vertical, 2.5)
                             .background(theme.accentSoft, in: Capsule())
                     }
                 }
@@ -796,7 +815,7 @@ struct DashboardMeetingsView: View {
 
             // Responsive tab switcher (pills never wrap internally)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     ForEach(DetailTab.allCases) { tab in
                         let isSelected = detailTab == tab
                         let label = (tab == .transcript && !meeting.segments.isEmpty)
@@ -809,14 +828,14 @@ struct DashboardMeetingsView: View {
                             }
                         } label: {
                             Text(label)
-                                .font(.caption.weight(isSelected ? .semibold : .medium))
+                                .font(isSelected ? ClaudeFonts.smallMedium : ClaudeFonts.small)
                                 .lineLimit(1)
                                 .fixedSize()
                                 .foregroundStyle(isSelected ? theme.ink : theme.secondaryInk)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 5)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                                         .fill(isSelected ? theme.surface : Color.clear)
                                         .shadow(color: isSelected ? theme.cardShadow : .clear, radius: 3, y: 1)
                                 )
@@ -825,9 +844,9 @@ struct DashboardMeetingsView: View {
                     }
                 }
                 .padding(3)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
             }
@@ -860,19 +879,17 @@ struct DashboardMeetingsView: View {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: meeting.template.systemImage)
-                    .font(.caption2)
+                ClaudeIcon(name: meeting.template.systemImage, size: 11, weight: .light)
                     .foregroundStyle(theme.secondaryInk)
                 Text(meeting.template.rawValue)
-                    .font(.caption.weight(.medium))
+                    .font(ClaudeFonts.smallMedium)
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8.5, weight: .semibold))
+                ClaudeIcon(name: "chevron.down", size: 8, weight: .regular)
                     .foregroundStyle(theme.secondaryInk)
             }
             .foregroundStyle(theme.ink)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 8.5)
+            .padding(.vertical, 3.5)
             .background(theme.surface, in: Capsule())
             .overlay(Capsule().strokeBorder(theme.border, lineWidth: 1))
         }
@@ -884,13 +901,13 @@ struct DashboardMeetingsView: View {
 
     private func metadataChip(_ text: String, systemImage: String) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: systemImage)
+            ClaudeIcon(name: systemImage, size: 11, weight: .light)
             Text(text)
+                .font(ClaudeFonts.small)
                 .lineLimit(1)
         }
-        .font(.caption)
         .foregroundStyle(theme.secondaryInk)
-        .padding(.vertical, 3)
+        .padding(.vertical, 2.5)
         .fixedSize()
     }
 
@@ -1254,22 +1271,26 @@ struct DashboardMeetingsView: View {
 
     private func recapTabView(_ meeting: MeetingRecord) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 // Action items card
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 9) {
                     HStack {
-                        Label("Задачи и следующие шаги", systemImage: "checklist")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(theme.ink)
+                        HStack(spacing: 6) {
+                            ClaudeIcon(name: "checklist", size: 12.5, weight: .light)
+                                .foregroundStyle(theme.secondaryInk)
+                            Text("Задачи и следующие шаги")
+                                .font(ClaudeFonts.uiMedium)
+                                .foregroundStyle(theme.ink)
+                        }
                         Spacer()
                         Text("\(meeting.actionItems.filter(\.completed).count)/\(meeting.actionItems.count)")
-                            .font(.caption.monospacedDigit())
+                            .font(ClaudeFonts.small.monospacedDigit())
                             .foregroundStyle(theme.secondaryInk)
                     }
 
                     if meeting.actionItems.isEmpty {
                         Text("Задачи не обнаружены автоматически. Можно добавить вручную ниже.")
-                            .font(.caption)
+                            .font(ClaudeFonts.small)
                             .foregroundStyle(theme.secondaryInk)
                     } else {
                         ForEach(meeting.actionItems) { item in
@@ -1281,26 +1302,30 @@ struct DashboardMeetingsView: View {
                                         }
                                     }
                                 } label: {
-                                    Image(systemName: item.completed ? "checkmark.square.fill" : "square")
-                                        .foregroundStyle(item.completed ? theme.accent : theme.secondaryInk)
+                                    ClaudeIcon(
+                                        name: item.completed ? "checkmark.square" : "square",
+                                        size: 13.5,
+                                        weight: .light
+                                    )
+                                    .foregroundStyle(item.completed ? theme.accent : theme.secondaryInk)
                                 }
                                 .buttonStyle(.plain)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.text)
-                                        .font(.callout)
+                                        .font(ClaudeFonts.body)
                                         .strikethrough(item.completed)
                                         .foregroundStyle(item.completed ? theme.secondaryInk : theme.ink)
                                     if item.assignee != nil || item.timestamp != nil {
                                         HStack(spacing: 6) {
                                             if let assignee = item.assignee {
                                                 Text(assignee)
-                                                    .font(.caption2)
+                                                    .font(ClaudeFonts.micro)
                                                     .foregroundStyle(theme.secondaryInk)
                                             }
                                             if let ts = item.timestamp {
                                                 Text("[\(MeetingRecord.formatTimestamp(ts))]")
-                                                    .font(.caption2.monospacedDigit())
+                                                    .font(ClaudeFonts.micro.monospacedDigit())
                                                     .foregroundStyle(theme.secondaryInk)
                                             }
                                         }
@@ -1314,8 +1339,7 @@ struct DashboardMeetingsView: View {
                                         rec.actionItems.removeAll { $0.id == item.id }
                                     }
                                 } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.caption2)
+                                    ClaudeIcon(name: "xmark", size: 9.5, weight: .light)
                                         .foregroundStyle(theme.tertiaryInk)
                                 }
                                 .buttonStyle(.plain)
@@ -1327,7 +1351,7 @@ struct DashboardMeetingsView: View {
                     HStack(spacing: 8) {
                         TextField("Добавить задачу…", text: $newActionItemText)
                             .textFieldStyle(.plain)
-                            .font(.callout)
+                            .font(ClaudeFonts.ui)
                             .foregroundStyle(theme.ink)
                             .onSubmit {
                                 addActionItem(to: meeting.id)
@@ -1335,28 +1359,31 @@ struct DashboardMeetingsView: View {
                         Button {
                             addActionItem(to: meeting.id)
                         } label: {
-                            Image(systemName: "plus")
-                                .font(.caption.weight(.bold))
+                            ClaudeIcon(name: "plus", size: 10.5, weight: .medium)
                         }
                         .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
                         .disabled(newActionItemText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .padding(.vertical, 5.5)
+                    .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8.5, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 8.5, style: .continuous)
                             .strokeBorder(theme.border, lineWidth: 1)
                     )
                 }
-                .claudeCard(theme, cornerRadius: 14, padding: 16)
+                .claudeCard(theme, cornerRadius: 12, padding: 14)
 
                 // Structured recap card
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 11) {
                     HStack {
-                        Label("Структурированный рекап", systemImage: "doc.richtext")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(theme.ink)
+                        HStack(spacing: 6) {
+                            ClaudeIcon(name: "doc.text", size: 12.5, weight: .light)
+                                .foregroundStyle(theme.secondaryInk)
+                            Text("Структурированный рекап")
+                                .font(ClaudeFonts.uiMedium)
+                                .foregroundStyle(theme.ink)
+                        }
                         Spacer()
                         if !meeting.recapMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isEditingRecapMarkdown {
                             Button(isEditingRecapMarkdown ? "Готово" : "Редактировать") {
@@ -1375,30 +1402,29 @@ struct DashboardMeetingsView: View {
                                 }
                             )
                         )
-                        .font(.system(.body, design: .monospaced))
+                        .font(ClaudeFonts.mono)
                         .foregroundStyle(theme.ink)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 280)
                         .padding(10)
-                        .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .strokeBorder(theme.border, lineWidth: 1)
                         )
                     } else if meeting.recapMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         VStack(spacing: 8) {
-                            Image(systemName: "doc.text")
-                                .font(.title2)
+                            ClaudeIcon(name: "doc.text", size: 22, weight: .ultraLight)
                                 .foregroundStyle(theme.tertiaryInk)
                             Text(meeting.status == .ready ? "Рекап пока пуст" : "Рекап появится после расшифровки")
-                                .font(.callout.weight(.medium))
+                                .font(ClaudeFonts.uiMedium)
                                 .foregroundStyle(theme.secondaryInk)
                             Text(
                                 meeting.status == .ready
                                     ? "Выберите «Пересобрать рекап» в меню действий или заполните вручную."
                                     : "Как только аудио будет расшифровано, VoiceType автоматически соберёт структурированный конспект."
                             )
-                            .font(.caption)
+                            .font(ClaudeFonts.small)
                             .foregroundStyle(theme.tertiaryInk)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 380)
@@ -1418,7 +1444,7 @@ struct DashboardMeetingsView: View {
                             .textSelection(.enabled)
                     }
                 }
-                .claudeCard(theme, cornerRadius: 14, padding: 16)
+                .claudeCard(theme, cornerRadius: 12, padding: 15)
             }
         }
         .scrollIndicators(.hidden)
@@ -1440,24 +1466,31 @@ struct DashboardMeetingsView: View {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if trimmed.hasPrefix("## ") {
                     Text(String(trimmed.dropFirst(3)))
-                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .font(ClaudeFonts.recapH2)
+                        .tracking(-0.2)
                         .foregroundStyle(theme.ink)
                         .padding(.top, 8)
                 } else if trimmed.hasPrefix("# ") {
                     Text(String(trimmed.dropFirst(2)))
-                        .font(.system(size: 20, weight: .semibold, design: .serif))
+                        .font(ClaudeFonts.recapH1)
+                        .tracking(-0.25)
                         .foregroundStyle(theme.ink)
                         .padding(.top, 10)
                 } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
                     HStack(alignment: .top, spacing: 8) {
                         Text("•")
+                            .font(ClaudeFonts.body)
                             .foregroundStyle(theme.accent)
                         Text((try? AttributedString(markdown: String(trimmed.dropFirst(2)))) ?? AttributedString(String(trimmed.dropFirst(2))))
+                            .font(ClaudeFonts.body)
+                            .lineSpacing(3.5)
                             .foregroundStyle(theme.ink)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else if !trimmed.isEmpty {
                     Text((try? AttributedString(markdown: trimmed)) ?? AttributedString(trimmed))
+                        .font(ClaudeFonts.body)
+                        .lineSpacing(3.5)
                         .foregroundStyle(theme.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1473,7 +1506,7 @@ struct DashboardMeetingsView: View {
             ViewThatFits(in: .horizontal) {
                 HStack {
                     Text("Ваши заметки со встречи (используются как скелет важности при генерации рекапа)")
-                        .font(.caption)
+                        .font(ClaudeFonts.small)
                         .foregroundStyle(theme.secondaryInk)
                     Spacer()
                     regenerateFromNotesButton(meeting)
@@ -1481,7 +1514,7 @@ struct DashboardMeetingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Ваши заметки со встречи (используются как скелет важности при генерации рекапа)")
-                        .font(.caption)
+                        .font(ClaudeFonts.small)
                         .foregroundStyle(theme.secondaryInk)
                     regenerateFromNotesButton(meeting)
                 }
@@ -1495,13 +1528,13 @@ struct DashboardMeetingsView: View {
                     }
                 )
             )
-            .font(.body)
+            .font(ClaudeFonts.body)
             .foregroundStyle(theme.ink)
             .scrollContentBackground(.hidden)
             .padding(14)
-            .background(theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(theme.border, lineWidth: 1)
             )
         }
@@ -1515,7 +1548,7 @@ struct DashboardMeetingsView: View {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: "sparkles")
+                ClaudeIcon(name: "sparkles", size: 11, weight: .regular)
                 Text("Обновить рекап по заметкам")
             }
         }
@@ -1535,14 +1568,14 @@ struct DashboardMeetingsView: View {
                 || meeting.displayName(for: seg.speaker).lowercased().contains(q)
         }
 
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 11) {
             HStack(spacing: 10) {
                 if !speakerIDs.isEmpty {
                     Button {
                         showSpeakersPopover.toggle()
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "person.2")
+                            ClaudeIcon(name: "person.2", size: 11.5, weight: .light)
                             Text("Спикеры (\(speakerIDs.count))")
                         }
                     }
@@ -1550,12 +1583,12 @@ struct DashboardMeetingsView: View {
                     .popover(isPresented: $showSpeakersPopover, arrowEdge: .bottom) {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Имена спикеров")
-                                .font(.headline)
+                                .font(ClaudeFonts.uiSemibold)
                             ForEach(speakerIDs, id: \.self) { spk in
                                 HStack(spacing: 8) {
                                     Circle()
                                         .fill(speakerColor(for: spk))
-                                        .frame(width: 8, height: 8)
+                                        .frame(width: 7, height: 7)
                                     TextField(
                                         meeting.stereoParties ? (spk == 0 ? "Вы" : "Собеседники") : "Спикер \(spk + 1)",
                                         text: Binding(
@@ -1579,20 +1612,18 @@ struct DashboardMeetingsView: View {
                 Spacer(minLength: 4)
 
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
+                    ClaudeIcon(name: "magnifyingglass", size: 11, weight: .light)
                         .foregroundStyle(theme.secondaryInk)
-                        .font(.caption)
                     TextField("Поиск по репликам…", text: $transcriptSearch)
                         .textFieldStyle(.plain)
-                        .font(.callout)
+                        .font(ClaudeFonts.ui)
                         .foregroundStyle(theme.ink)
                     if !transcriptSearch.isEmpty {
                         Button {
                             transcriptSearch = ""
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
+                            ClaudeIcon(name: "xmark", size: 9.5, weight: .regular)
                                 .foregroundStyle(theme.secondaryInk)
-                                .font(.caption)
                         }
                         .buttonStyle(.plain)
                     }
@@ -1600,9 +1631,9 @@ struct DashboardMeetingsView: View {
                 .padding(.horizontal, 9)
                 .padding(.vertical, 5)
                 .frame(minWidth: 140, maxWidth: 230)
-                .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 7.5, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7.5, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
             }
@@ -1610,50 +1641,50 @@ struct DashboardMeetingsView: View {
             if filteredSegments.isEmpty {
                 VStack(spacing: 8) {
                     Spacer()
-                    Image(systemName: meeting.segments.isEmpty ? "text.alignleft" : "magnifyingglass")
-                        .font(.title2)
+                    ClaudeIcon(name: meeting.segments.isEmpty ? "text.alignleft" : "magnifyingglass", size: 22, weight: .ultraLight)
                         .foregroundStyle(theme.tertiaryInk)
                     Text(meeting.segments.isEmpty ? "Транскрипт пока пуст" : "Реплики не найдены")
-                        .font(.callout.weight(.medium))
+                        .font(ClaudeFonts.uiMedium)
                         .foregroundStyle(theme.secondaryInk)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
+                    LazyVStack(alignment: .leading, spacing: 9) {
                         ForEach(Array(filteredSegments.enumerated()), id: \.offset) { _, seg in
                             HStack(alignment: .top, spacing: 10) {
                                 Text(MeetingRecord.formatTimestamp(seg.start))
-                                    .font(.caption.monospacedDigit())
+                                    .font(ClaudeFonts.micro.monospacedDigit())
                                     .foregroundStyle(theme.secondaryInk)
-                                    .frame(width: 42, alignment: .leading)
+                                    .frame(width: 40, alignment: .leading)
                                     .padding(.top, 2)
 
                                 Text(meeting.displayName(for: seg.speaker))
-                                    .font(.caption.weight(.semibold))
+                                    .font(ClaudeFonts.microMedium)
                                     .foregroundStyle(speakerColor(for: seg.speaker ?? 0))
                                     .lineLimit(1)
-                                    .padding(.horizontal, 8)
+                                    .padding(.horizontal, 7)
                                     .padding(.vertical, 2)
                                     .background(speakerColor(for: seg.speaker ?? 0).opacity(0.12), in: Capsule())
                                     .frame(minWidth: 64, maxWidth: 112, alignment: .leading)
 
                                 Text(seg.text)
-                                    .font(.callout)
+                                    .font(ClaudeFonts.body)
+                                    .lineSpacing(3)
                                     .foregroundStyle(theme.ink)
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 3.5)
                             Divider().overlay(theme.border)
                         }
                     }
                     .padding(14)
                 }
-                .background(theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
             }

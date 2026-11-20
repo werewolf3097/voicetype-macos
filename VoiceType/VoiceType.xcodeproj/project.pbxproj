@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0B146B2A0F90C204C0E7748B /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94E90680F395346C87F5BA5E /* TextInjector.swift */; };
 		1187A633B51B95FF22CCABD9 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87C596586B6F5B8CADC66EEE /* AppState.swift */; };
+		1600349D731E16AB7B7AB5DF /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = DEF92EBB6413802A0028C4C2 /* Fonts */; };
 		1693D9083766D1FBE308129D /* DashboardMeetingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 434B7FF79F533D836E0BAE02 /* DashboardMeetingsView.swift */; };
 		25550EC35ABA028C40673C7F /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8254E25852DB8ED4DF25042 /* SettingsStore.swift */; };
 		30CA5392433C844011C08AD8 /* ClaudeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4788B416BBA06D7AD88708F /* ClaudeClient.swift */; };
@@ -68,6 +69,7 @@
 		AF33DDA564FA46E653A6F103 /* DashboardSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardSettingsView.swift; sourceTree = "<group>"; };
 		B99D35A61420C8F6909FD9E2 /* RussianTransliterator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RussianTransliterator.swift; sourceTree = "<group>"; };
 		C4788B416BBA06D7AD88708F /* ClaudeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeClient.swift; sourceTree = "<group>"; };
+		DEF92EBB6413802A0028C4C2 /* Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fonts; path = VoiceType/Resources/Fonts; sourceTree = SOURCE_ROOT; };
 		DF084FBC0A7AED8A73AC04AB /* RecordingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingIndicatorController.swift; sourceTree = "<group>"; };
 		F8254E25852DB8ED4DF25042 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		F951730C87188297E4F9270C /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -82,6 +84,14 @@
 				F8BA157038B95AA445BB489C /* VoiceType */,
 				AE43BAA28D2CC6AB57476576 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		2A534B22708915DD5871B19C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				DEF92EBB6413802A0028C4C2 /* Fonts */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		6811FB2AE2373D9887E3AF5F /* Sources */ = {
@@ -133,6 +143,7 @@
 		F8BA157038B95AA445BB489C /* VoiceType */ = {
 			isa = PBXGroup;
 			children = (
+				2A534B22708915DD5871B19C /* Resources */,
 				6811FB2AE2373D9887E3AF5F /* Sources */,
 			);
 			path = VoiceType;
@@ -146,6 +157,7 @@
 			buildConfigurationList = FA519B0E75EC5ED143204F6C /* Build configuration list for PBXNativeTarget "VoiceType" */;
 			buildPhases = (
 				4B7512A93252E792349B3E2D /* Sources */,
+				D9D4727009F48FDE956BD33F /* Resources */,
 			);
 			buildRules = (
 			);
@@ -190,6 +202,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D9D4727009F48FDE956BD33F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1600349D731E16AB7B7AB5DF /* Fonts in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4B7512A93252E792349B3E2D /* Sources */ = {

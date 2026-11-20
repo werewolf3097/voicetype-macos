@@ -3,9 +3,33 @@
 <plist version="1.0">
 <dict>
 	<key>files</key>
-	<dict/>
+	<dict>
+		<key>Resources/Fonts/CormorantGaramond-Variable.ttf</key>
+		<data>
+		H9GvISztX9UrGzFCQ+vHU9RnVAA=
+		</data>
+		<key>Resources/Fonts/Inter-Variable.ttf</key>
+		<data>
+		l9Tzci1ixsxTQL9iIK2j1kyjZ7E=
+		</data>
+	</dict>
 	<key>files2</key>
-	<dict/>
+	<dict>
+		<key>Resources/Fonts/CormorantGaramond-Variable.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			sgt9libdlWssXlWGkq0yix8Z4ydeJ4LbT6B2cNg/NeA=
+			</data>
+		</dict>
+		<key>Resources/Fonts/Inter-Variable.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			KRYKgP9J3cqyyXcRJH4IsfqyekhKMpzouBPYINxVkDE=
+			</data>
+		</dict>
+	</dict>
 	<key>rules</key>
 	<dict>
 		<key>^Resources/</key>
