@@ -50,6 +50,7 @@ struct VoiceTypeApp: App {
 }
 
 private struct MenuBarIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: RecordingStatus
 
     var body: some View {
@@ -57,14 +58,18 @@ private struct MenuBarIcon: View {
             switch status {
             case .idle:
                 Image(systemName: "mic")
+                    .accessibilityLabel("VoiceType готов")
             case .recording:
                 Image(systemName: "waveform")
-                    .symbolEffect(.variableColor.iterative, isActive: true)
+                    .symbolEffect(.variableColor.iterative, isActive: !reduceMotion)
+                    .accessibilityLabel("Идёт запись")
             case .transcribing, .cleaning:
                 Image(systemName: "waveform")
-                    .symbolEffect(.pulse, isActive: true)
+                    .symbolEffect(.pulse, isActive: !reduceMotion)
+                    .accessibilityLabel("Обработка речи")
             case .error:
                 Image(systemName: "exclamationmark.triangle")
+                    .accessibilityLabel("Ошибка VoiceType")
             }
         }
     }

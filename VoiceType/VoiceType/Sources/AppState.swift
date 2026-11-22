@@ -2,18 +2,14 @@ import AVFoundation
 import AppKit
 import Foundation
 
-enum RecordingStatus: Equatable {
-    case idle
-    case recording
-    case transcribing
-    case cleaning
-    case error(String)
-}
-
 @MainActor
 final class AppState: ObservableObject {
     @Published var status: RecordingStatus = .idle {
-        didSet { indicator.update(status: status) }
+        didSet {
+            let outcome = pendingIndicatorOutcome
+            pendingIndicatorOutcome = nil
+            indicator.update(status: status, targetApp: activeTargetApp, insertOutcome: outcome)
+        }
     }
     @Published var selectedSection: DashboardSection? = .home
     @Published var lastText: String = ""
@@ -50,6 +46,8 @@ final class AppState: ObservableObject {
     private var activeTranscriptionToken: UUID?
     private var lastNotifiedHotkeyIssue: HotkeyIssue?
     private var permissionsTimer: Timer?
+    private var activeTargetApp: String?
+    private var pendingIndicatorOutcome: InsertStatus?
 
     private enum HotkeyIssue: Equatable {
         case inputMonitoringMissing
@@ -66,6 +64,10 @@ final class AppState: ObservableObject {
         self.history = history
         self.dictionary = dictionary ?? DictionaryStore()
         self.meetings = meetings ?? MeetingsStore()
+        indicator.configure(settings: settings)
+        recorder.onAudioLevel = { [weak self] level in
+            self?.indicator.updateAudioLevel(level)
+        }
         hotkeys.onStart = { [weak self] in self?.beginRecording() }
         hotkeys.onStop = { [weak self] in self?.finishRecording() }
         hotkeys.onCancel = { [weak self] in self?.cancelRecording() }
@@ -227,10 +229,12 @@ final class AppState: ObservableObject {
         }
 
         do {
+            activeTargetApp = currentTargetAppName()
             try recorder.start()
             recordingStartedAt = Date()
             status = .recording
         } catch {
+            activeTargetApp = nil
             hotkeys.notifyRecordingEndedExternally()
             status = .error("Не удалось начать запись: \(error.localizedDescription)")
         }
@@ -242,11 +246,15 @@ final class AppState: ObservableObject {
         recordingStartedAt = nil
 
         guard let fileURL = recorder.stop() else {
+            activeTargetApp = nil
             hotkeys.notifyRecordingEndedExternally()
             status = .idle
             return
         }
 
+        if let frontApp = currentTargetAppName() {
+            activeTargetApp = frontApp
+        }
         status = .transcribing
         dictationTask?.cancel()
         dictationTask = Task { [weak self] in
@@ -369,7 +377,8 @@ final class AppState: ObservableObject {
             try Task.checkCancellation()
             guard !Task.isCancelled else { return }
 
-            let targetApp = currentTargetAppName()
+            let targetApp = currentTargetAppName() ?? activeTargetApp
+            activeTargetApp = targetApp
             let insertOutcome = TextInjector.insert(
                 text: finalText,
                 mode: settings.pasteMode,
@@ -392,6 +401,7 @@ final class AppState: ObservableObject {
                 latencyMs: result.latencyMs
             )
             hotkeys.notifyRecordingEndedExternally()
+            pendingIndicatorOutcome = insertOutcome
             status = .idle
         } catch is CancellationError {
             hotkeys.notifyRecordingEndedExternally()

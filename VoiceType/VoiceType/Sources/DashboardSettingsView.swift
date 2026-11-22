@@ -101,6 +101,47 @@ struct DashboardSettingsView: View {
                     }
                 }
 
+                settingsCard("Индикатор записи") {
+                    settingRow("Положение на экране") {
+                        Picker("", selection: $settings.indicatorPosition) {
+                            ForEach(IndicatorPosition.allCases) { pos in
+                                Text(pos.rawValue).tag(pos)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
+
+                    if settings.indicatorPosition == .top {
+                        Divider().overlay(paperTheme.borderColor)
+
+                        settingRow(
+                            "Размещение",
+                            caption: "На Mac без выреза «Из выреза» работает как «Под строкой меню»."
+                        ) {
+                            Picker("", selection: $settings.indicatorPlacement) {
+                                ForEach(IndicatorPlacement.allCases) { placement in
+                                    Text(placement.rawValue).tag(placement)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 220)
+                        }
+                    }
+
+                    Divider().overlay(paperTheme.borderColor)
+
+                    settingRow("Вид обработки") {
+                        Picker("", selection: $settings.processingLook) {
+                            ForEach(ProcessingLook.allCases) { look in
+                                Text(look.rawValue).tag(look)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
+                }
+
                 settingsCard("Голос и диктовка") {
                     settingRow("Клавиша записи") {
                         HStack(spacing: 8) {

@@ -28,6 +28,7 @@
 		40C69FD7C5714D80A9203E14 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413F19B4B726CDF7049FCAFF /* MenuBarView.swift */; };
 		42A7E19956C92C8879E1D911 /* UzbekDialectConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2762FB627A74AD05CC115BA2 /* UzbekDialectConverter.swift */; };
 		46F6BC3694AAC48599DFBAD1 /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19FA06FF64AE11EF072A1B2 /* TranscriptionProvider.swift */; };
+		4936A6A2DBFEF0B4A7248971 /* RecordingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF5C060AAEFC6E9B4EF67A5 /* RecordingIndicatorView.swift */; };
 		4B82BFC08A4BAC5147B0F3C0 /* HomeServerProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B03ADEB6EF72A42848267649 /* HomeServerProviderTests.swift */; };
 		4E4FA61778E12315C3C53D02 /* MeetingRecapGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FCBCBE03E7CB856522FE484 /* MeetingRecapGenerator.swift */; };
 		53DF0CD1D52D595D1D77E1B0 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12DB855FD285B442661651E2 /* HotkeyManager.swift */; };
@@ -47,12 +48,15 @@
 		9F9CC477A8E19F43E51CEA0A /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94E90680F395346C87F5BA5E /* TextInjector.swift */; };
 		A0EDA1FF9F0F32458483FEB2 /* DockIconController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DE34C162F42732FE2BF051 /* DockIconController.swift */; };
 		A2822830C2DCB50261953929 /* NotificationHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66B187B6F55F20E36907FBB1 /* NotificationHelper.swift */; };
+		A6FD19F821FE5481484018BA /* RecordingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF084FBC0A7AED8A73AC04AB /* RecordingIndicatorController.swift */; };
 		A9B87AC54BC47816FDED75EB /* DashboardHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4867DFE5229711CA29F6228C /* DashboardHistoryView.swift */; };
 		AFED708539D2A3D573978EBB /* UzbekDialectConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2762FB627A74AD05CC115BA2 /* UzbekDialectConverter.swift */; };
 		BA5EB1B4E80D467FBC790C12 /* HomeServerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852F823EA043399D5BD32BC2 /* HomeServerProvider.swift */; };
 		BDE55C657B2152C648B4669D /* PaperComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0922BA428295CD4FA4241CB1 /* PaperComponents.swift */; };
 		BF178805A566311A0FDBA55D /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715FDB0292B41137BBE0B825 /* KeychainStore.swift */; };
 		C847C43F77828DEFAC8B06F6 /* DictionaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DBE8882C3E9EADEF8DAD748 /* DictionaryStore.swift */; };
+		CBA623C62453977D3D750FA6 /* PaperComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0922BA428295CD4FA4241CB1 /* PaperComponents.swift */; };
+		D0B0FBB25AAA5BBB2C6B89DC /* Phase3IndicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 565684B056D853C52BCBF406 /* Phase3IndicatorTests.swift */; };
 		D0DE0E2980FCDB8039E65668 /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19FA06FF64AE11EF072A1B2 /* TranscriptionProvider.swift */; };
 		D5DF592090940957E46BAD99 /* VoiceTypeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DA4F1C6F8F0BE0AE040AF96 /* VoiceTypeApp.swift */; };
 		D875CD782142CFEE06F7312F /* GapiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63D80FD81608ABCB7ECF1189 /* GapiClient.swift */; };
@@ -61,6 +65,7 @@
 		E73343D924B0F1A6B8C5CE93 /* RussianTransliterator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B99D35A61420C8F6909FD9E2 /* RussianTransliterator.swift */; };
 		E97AD2359099DDAF2F15DD9C /* DashboardHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C69AFF8A2BDE3F922F021D4 /* DashboardHomeView.swift */; };
 		EA4116739D8F68D3BD6B8FAA /* PermissionsHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F5A8542089BAFAF0481165 /* PermissionsHelper.swift */; };
+		EEB2B2C72D0941509F1ED6B5 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 358AB5B314F5339BC687EB72 /* AudioRecorder.swift */; };
 		EF617543F6627700E0D586DE /* WhisperWindowsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8455EAEE007AA71EE994CD /* WhisperWindowsClient.swift */; };
 		F65B73F4EF8D7B34D5F5BFCE /* GapiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63D80FD81608ABCB7ECF1189 /* GapiClient.swift */; };
 		F6B8B11C55B68FAB55AFFBF2 /* ClaudeTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927E09303D17328F64E20461 /* ClaudeTheme.swift */; };
@@ -83,6 +88,7 @@
 		434B7FF79F533D836E0BAE02 /* DashboardMeetingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardMeetingsView.swift; sourceTree = "<group>"; };
 		43CC8D05C02FE1DC9F791B2F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4867DFE5229711CA29F6228C /* DashboardHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHistoryView.swift; sourceTree = "<group>"; };
+		565684B056D853C52BCBF406 /* Phase3IndicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase3IndicatorTests.swift; sourceTree = "<group>"; };
 		63D80FD81608ABCB7ECF1189 /* GapiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GapiClient.swift; sourceTree = "<group>"; };
 		66B187B6F55F20E36907FBB1 /* NotificationHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationHelper.swift; sourceTree = "<group>"; };
 		69DE34C162F42732FE2BF051 /* DockIconController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockIconController.swift; sourceTree = "<group>"; };
@@ -186,6 +192,7 @@
 				82B3833A4F6D037A5C9A79DB /* MockGatewayServer.swift */,
 				3D0DAD189833F8BC56C05D61 /* PaperThemeTests.swift */,
 				A0338961F64DB29AB82B6F29 /* Phase2CoreTests.swift */,
+				565684B056D853C52BCBF406 /* Phase3IndicatorTests.swift */,
 			);
 			path = VoiceTypeTests;
 			sourceTree = "<group>";
@@ -297,6 +304,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8547DC9728A443DD16144648 /* AudioCompressor.swift in Sources */,
+				EEB2B2C72D0941509F1ED6B5 /* AudioRecorder.swift in Sources */,
 				290A4158146C90D765892C87 /* DictionaryStore.swift in Sources */,
 				5C16B1B33AEF73DA771C2EE1 /* DockIconController.swift in Sources */,
 				D875CD782142CFEE06F7312F /* GapiClient.swift in Sources */,
@@ -306,10 +314,14 @@
 				1FF49DBD6A9AA52862A9988B /* HotkeyStateMachine.swift in Sources */,
 				2AC12459608F88A5D58D5F46 /* KeychainStore.swift in Sources */,
 				38125EA2E57140B4C8106740 /* MockGatewayServer.swift in Sources */,
+				CBA623C62453977D3D750FA6 /* PaperComponents.swift in Sources */,
 				1779AC5DE7116E15A868B607 /* PaperTheme.swift in Sources */,
 				282DD22B38A88AA8AE3F1726 /* PaperThemeTests.swift in Sources */,
 				08A58E23E37817D4570BE552 /* PermissionsHelper.swift in Sources */,
 				6C7B24EE06075A3212248151 /* Phase2CoreTests.swift in Sources */,
+				D0B0FBB25AAA5BBB2C6B89DC /* Phase3IndicatorTests.swift in Sources */,
+				A6FD19F821FE5481484018BA /* RecordingIndicatorController.swift in Sources */,
+				4936A6A2DBFEF0B4A7248971 /* RecordingIndicatorView.swift in Sources */,
 				E73343D924B0F1A6B8C5CE93 /* RussianTransliterator.swift in Sources */,
 				149678030D809DD844F84CE2 /* SettingsStore.swift in Sources */,
 				9F9CC477A8E19F43E51CEA0A /* TextInjector.swift in Sources */,

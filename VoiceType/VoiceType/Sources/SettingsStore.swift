@@ -75,6 +75,30 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum IndicatorPosition: String, CaseIterable, Identifiable, Codable, Sendable {
+    case top = "Сверху"
+    case bottom = "Снизу"
+    case off = "Выключен"
+
+    var id: String { rawValue }
+}
+
+enum IndicatorPlacement: String, CaseIterable, Identifiable, Codable, Sendable {
+    case fromNotch = "Из выреза"
+    case inMenuBar = "В строке меню"
+    case belowMenuBar = "Под строкой меню"
+
+    var id: String { rawValue }
+}
+
+enum ProcessingLook: String, CaseIterable, Identifiable, Codable, Sendable {
+    case flow = "Бегущая волна"
+    case pulse = "Пульс"
+    case sweep = "Луч"
+
+    var id: String { rawValue }
+}
+
 enum MeetingAudioSource: String, CaseIterable, Identifiable, Codable {
     case micAndSystem = "Микрофон + Системный звук"
     case micOnly = "Только микрофон"
@@ -146,6 +170,15 @@ final class SettingsStore: ObservableObject {
     }
     @Published var fontPreset: FontPreset {
         didSet { defaults.set(fontPreset.rawValue, forKey: "fontPreset") }
+    }
+    @Published var indicatorPosition: IndicatorPosition {
+        didSet { defaults.set(indicatorPosition.rawValue, forKey: "indicatorPosition") }
+    }
+    @Published var indicatorPlacement: IndicatorPlacement {
+        didSet { defaults.set(indicatorPlacement.rawValue, forKey: "indicatorPlacement") }
+    }
+    @Published var processingLook: ProcessingLook {
+        didSet { defaults.set(processingLook.rawValue, forKey: "processingLook") }
     }
     @Published var showDockIcon: Bool {
         didSet {
@@ -302,6 +335,9 @@ final class SettingsStore: ObservableObject {
         self.paperDepth = defaults.object(forKey: "paperDepth") as? Double ?? 0.6
         self.paperGrainIntensity = defaults.object(forKey: "paperGrainIntensity") as? Double ?? 0.8
         self.fontPreset = FontPreset(rawValue: defaults.string(forKey: "fontPreset") ?? "") ?? .paperNewYork
+        self.indicatorPosition = IndicatorPosition(rawValue: defaults.string(forKey: "indicatorPosition") ?? "") ?? .top
+        self.indicatorPlacement = IndicatorPlacement(rawValue: defaults.string(forKey: "indicatorPlacement") ?? "") ?? .fromNotch
+        self.processingLook = ProcessingLook(rawValue: defaults.string(forKey: "processingLook") ?? "") ?? .flow
         let dockVisible = defaults.object(forKey: "showDockIcon") as? Bool ?? true
         self.showDockIcon = dockVisible
         self.meetingAudioSource = MeetingAudioSource(rawValue: defaults.string(forKey: "meetingAudioSource") ?? "") ?? .micAndSystem

@@ -53,6 +53,10 @@ targets:
       - path: VoiceType/Sources/DockIconController.swift
       - path: VoiceType/Sources/UzbekDialectConverter.swift
       - path: VoiceType/Sources/PermissionsHelper.swift
+      - path: VoiceType/Sources/AudioRecorder.swift
+      - path: VoiceType/Sources/PaperComponents.swift
+      - path: VoiceType/Sources/RecordingIndicatorView.swift
+      - path: VoiceType/Sources/RecordingIndicatorController.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farrukh.voicetype.tests
