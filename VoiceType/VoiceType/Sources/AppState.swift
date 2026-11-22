@@ -231,9 +231,16 @@ final class AppState: ObservableObject {
 
         do {
             activeTargetApp = currentTargetAppName()
-            try recorder.start()
+            let devices = AudioInputDeviceManager.availableInputDevices()
+            let targetDevice = AudioInputDeviceManager.resolveTargetDevice(
+                from: devices,
+                selectedUID: settings.selectedMicrophoneUID,
+                preferBuiltInOverBluetooth: settings.preferBuiltInMicOverBluetooth
+            )
+            try recorder.start(deviceID: targetDevice?.id)
             recordingStartedAt = Date()
             status = .recording
+            SoundCuePlayer.shared.play(.startRecording, enabled: settings.soundsEnabled, volume: settings.soundVolume)
         } catch {
             activeTargetApp = nil
             hotkeys.notifyRecordingEndedExternally()
@@ -256,6 +263,7 @@ final class AppState: ObservableObject {
         if let frontApp = currentTargetAppName() {
             activeTargetApp = frontApp
         }
+        SoundCuePlayer.shared.play(.stopRecording, enabled: settings.soundsEnabled, volume: settings.soundVolume)
         status = .transcribing
         dictationTask?.cancel()
         dictationTask = Task { [weak self] in
@@ -402,6 +410,9 @@ final class AppState: ObservableObject {
                 latencyMs: result.latencyMs
             )
             hotkeys.notifyRecordingEndedExternally()
+            if insertOutcome == .inserted {
+                SoundCuePlayer.shared.play(.inserted, enabled: settings.soundsEnabled, volume: settings.soundVolume)
+            }
             pendingIndicatorOutcome = insertOutcome
             status = .idle
         } catch is CancellationError {

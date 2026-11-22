@@ -180,6 +180,18 @@ final class SettingsStore: ObservableObject {
     @Published var processingLook: ProcessingLook {
         didSet { defaults.set(processingLook.rawValue, forKey: "processingLook") }
     }
+    @Published var soundsEnabled: Bool {
+        didSet { defaults.set(soundsEnabled, forKey: "soundsEnabled") }
+    }
+    @Published var soundVolume: Double {
+        didSet { defaults.set(soundVolume, forKey: "soundVolume") }
+    }
+    @Published var selectedMicrophoneUID: String {
+        didSet { defaults.set(selectedMicrophoneUID, forKey: "selectedMicrophoneUID") }
+    }
+    @Published var preferBuiltInMicOverBluetooth: Bool {
+        didSet { defaults.set(preferBuiltInMicOverBluetooth, forKey: "preferBuiltInMicOverBluetooth") }
+    }
     @Published var showDockIcon: Bool {
         didSet {
             defaults.set(showDockIcon, forKey: "showDockIcon")
@@ -338,6 +350,10 @@ final class SettingsStore: ObservableObject {
         self.indicatorPosition = IndicatorPosition(rawValue: defaults.string(forKey: "indicatorPosition") ?? "") ?? .top
         self.indicatorPlacement = IndicatorPlacement(rawValue: defaults.string(forKey: "indicatorPlacement") ?? "") ?? .fromNotch
         self.processingLook = ProcessingLook(rawValue: defaults.string(forKey: "processingLook") ?? "") ?? .flow
+        self.soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
+        self.soundVolume = defaults.object(forKey: "soundVolume") as? Double ?? 0.35
+        self.selectedMicrophoneUID = defaults.string(forKey: "selectedMicrophoneUID") ?? ""
+        self.preferBuiltInMicOverBluetooth = defaults.object(forKey: "preferBuiltInMicOverBluetooth") as? Bool ?? false
         let dockVisible = defaults.object(forKey: "showDockIcon") as? Bool ?? true
         self.showDockIcon = dockVisible
         self.meetingAudioSource = MeetingAudioSource(rawValue: defaults.string(forKey: "meetingAudioSource") ?? "") ?? .micAndSystem

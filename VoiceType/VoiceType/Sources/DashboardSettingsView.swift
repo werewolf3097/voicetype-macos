@@ -25,6 +25,7 @@ struct DashboardSettingsView: View {
     @State private var homeServerCheckState: HomeServerCheckState = .idle
     @State private var showAdvanced = false
     @State private var proUpsellTheme: PaperTheme? = nil
+    @State private var inputDevices: [AudioInputDevice] = []
 
     private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
@@ -40,6 +41,7 @@ struct DashboardSettingsView: View {
                     )
 
                     dictationGroup
+                    audioAndMicGroup
                     indicatorGroup
                     appearanceGroup
                     apiKeysGroup
@@ -80,12 +82,15 @@ struct DashboardSettingsView: View {
                 appState.refreshPermissionsAndHotkey()
             }
             refreshAudioStats()
+            refreshInputDevices()
         }
         .onChange(of: settings.meetingAudioRetention) { _, _ in
             refreshAudioStats()
+            refreshInputDevices()
         }
         .onChange(of: meetingsStore.meetings) { _, _ in
             refreshAudioStats()
+            refreshInputDevices()
         }
         .sheet(item: $proUpsellTheme) { lockedTheme in
             proPaperSheet(lockedTheme)
@@ -190,6 +195,93 @@ struct DashboardSettingsView: View {
                 .frame(width: 210)
             }
         }
+    }
+
+    private var audioAndMicGroup: some View {
+        PaperSettingGroup("Микрофон и звуки") {
+            PaperSettingRow(
+                "Микрофон",
+                caption: "Микрофон включается только во время диктовки.",
+                systemImage: "mic",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                HStack(spacing: 8) {
+                    Picker("", selection: $settings.selectedMicrophoneUID) {
+                        Text("Системный по умолчанию").tag("")
+                        ForEach(inputDevices) { dev in
+                            Text(dev.isDefault ? "\(dev.name) (по умолчанию)" : dev.name)
+                                .tag(dev.uid)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 210)
+
+                    Button {
+                        refreshInputDevices()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                    .help("Обновить список микрофонов")
+                    .accessibilityLabel("Обновить список микрофонов")
+                }
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Использовать микрофон Mac вместо Bluetooth",
+                caption: "Bluetooth-наушники звучат хуже, пока включён их микрофон.",
+                systemImage: "headphones",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                Toggle("", isOn: $settings.preferBuiltInMicOverBluetooth)
+                    .labelsHidden()
+                    .toggleStyle(PaperToggleStyle())
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Звуковые сигналы",
+                caption: "Короткие тихие сигналы при старте, завершении записи и вставке.",
+                systemImage: "speaker.wave.2",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                Toggle("", isOn: $settings.soundsEnabled)
+                    .labelsHidden()
+                    .toggleStyle(PaperToggleStyle())
+            }
+
+            if settings.soundsEnabled {
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Громкость сигналов",
+                    caption: "Нажмите «Проверить», чтобы услышать сигнал.",
+                    systemImage: "speaker.wave.1",
+                    tileTint: PaperTokens.dictationBlue
+                ) {
+                    HStack(spacing: 10) {
+                        Slider(value: $settings.soundVolume, in: 0.05...1.0, step: 0.05)
+                            .frame(width: 140)
+                        Button("Проверить") {
+                            SoundCuePlayer.shared.play(
+                                .startRecording,
+                                enabled: settings.soundsEnabled,
+                                volume: settings.soundVolume
+                            )
+                        }
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                    }
+                }
+            }
+        }
+    }
+
+    private func refreshInputDevices() {
+        inputDevices = AudioInputDeviceManager.availableInputDevices()
     }
 
     private var indicatorGroup: some View {

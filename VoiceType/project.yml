@@ -55,6 +55,8 @@ targets:
       - path: VoiceType/Sources/UzbekDialectConverter.swift
       - path: VoiceType/Sources/PermissionsHelper.swift
       - path: VoiceType/Sources/AudioRecorder.swift
+      - path: VoiceType/Sources/AudioInputDeviceManager.swift
+      - path: VoiceType/Sources/SoundCuePlayer.swift
       - path: VoiceType/Sources/PaperComponents.swift
       - path: VoiceType/Sources/RecordingIndicatorView.swift
       - path: VoiceType/Sources/RecordingIndicatorController.swift
