@@ -73,10 +73,12 @@ struct ClaudeClient {
         return resultText.isEmpty ? text : resultText
     }
 
-    private static func buildSystemPrompt(
+    static func buildSystemPrompt(
         base: String,
         transcription: GapiTranscription,
-        uzbekStyle: UzbekStyle
+        uzbekStyle: UzbekStyle,
+        modifiers: CleanupModifiers = .default,
+        targetAppName: String? = nil
     ) -> String {
         let hasRussian = transcription.languageCode == "ru"
             || (transcription.languageShare?["ru"] ?? 0) > 0.05
@@ -87,8 +89,29 @@ struct ClaudeClient {
             || transcription.segments.contains { $0.languageCode == "uz" || $0.languageCode == "uz-khorezm" }
 
         var extra: [String] = [
-            "Текст уже в письменной форме: русский записан кириллицей, узбекский — латиницей. Не транслитерируй заново и не переводи. Не сокращай и не выкидывай предложения, имена и названия. Расставь пунктуацию, убери слова-паразиты и самоисправления, поправь очевидный сбой распознавания (пропущенные ь и ы, ш вместо щ, название компании, которое слышно как «эпам»). Аббревиатуры пиши как принято, целиком."
+            "Текст уже в письменной форме: русский записан кириллицей, узбекский — латиницей. Не транслитерируй заново и не переводи без явной инструкции. Не сокращай и не выкидывай факты, имена и названия. Аббревиатуры пиши целиком, как принято."
         ]
+
+        if modifiers.compactMode {
+            extra.append("Надстройка «Без воды»: убери повторы и лишние вводные фразы, передай смысл максимально компактно, сохраняя выбранный тон.")
+        }
+
+        if modifiers.structuredLists {
+            extra.append("Надстройка «Списки и абзацы»: если в речи перечисляются пункты, шаги или задачи, оформи их аккуратным маркированным списком или логичными абзацами.")
+        }
+
+        if modifiers.preserveTechnicalTerms {
+            extra.append("Надстройка «Код и термины»: не переводи и не искажай технические термины, названия сервисов, URL, пути к файлам, CLI-команды и идентификаторы вроде camelCase или snake_case.")
+        }
+
+        let trimmedCustom = modifiers.customInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedCustom.isEmpty {
+            extra.append("Дополнительная инструкция пользователя: \(trimmedCustom)")
+        }
+
+        if let targetAppName, !targetAppName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            extra.append("Контекст: текст будет вставлен в приложение «\(targetAppName)».")
+        }
 
         if let lang = transcription.languageCode {
             let shareInfo: String
@@ -114,7 +137,7 @@ struct ClaudeClient {
         return ([base] + extra).joined(separator: "\n\n")
     }
 
-    private static func buildUserPrompt(transcription: GapiTranscription) -> String {
+    static func buildUserPrompt(transcription: GapiTranscription) -> String {
         let labeledSegments = transcription.segments.filter { $0.languageCode != nil && !$0.text.isEmpty }
         if labeledSegments.count > 1 {
             let lines = labeledSegments.map { seg in
@@ -126,6 +149,38 @@ struct ClaudeClient {
     }
 
     func generateMeetingRecap(for meeting: MeetingRecord) async throws -> MeetingRecapOutput {
+        let prompts = Self.buildMeetingRecapPrompts(for: meeting)
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body = RequestBody(
+            model: recapModel,
+            max_tokens: 4096,
+            system: prompts.system,
+            messages: [.init(role: "user", content: prompts.user)]
+        )
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let message = String(data: data, encoding: .utf8) ?? "Claude API вернул ошибку"
+            throw ClaudeError(message: message)
+        }
+
+        let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
+        let fullText = decoded.content.compactMap(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fullText.isEmpty else {
+            return LocalRecapBuilder.build(for: meeting)
+        }
+
+        return Self.parseMeetingRecapResponse(fullText, for: meeting)
+    }
+
+    static func buildMeetingRecapPrompts(for meeting: MeetingRecord) -> (system: String, user: String) {
         let headings = meeting.template.sectionHeadings.map { "## \($0)" }.joined(separator: "\n")
         let systemPrompt = """
         Ты — ассистент для подведения итогов встреч в стиле Granola.ai.
@@ -162,33 +217,10 @@ struct ClaudeClient {
         if !transcriptLines.isEmpty {
             userParts.append("Транскрипт встречи:\n\(transcriptLines)")
         }
+        return (system: systemPrompt, user: userParts.joined(separator: "\n\n"))
+    }
 
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = RequestBody(
-            model: recapModel,
-            max_tokens: 4096,
-            system: systemPrompt,
-            messages: [.init(role: "user", content: userParts.joined(separator: "\n\n"))]
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let message = String(data: data, encoding: .utf8) ?? "Claude API вернул ошибку"
-            throw ClaudeError(message: message)
-        }
-
-        let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
-        let fullText = decoded.content.compactMap(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !fullText.isEmpty else {
-            return LocalRecapBuilder.build(for: meeting)
-        }
-
+    static func parseMeetingRecapResponse(_ fullText: String, for meeting: MeetingRecord) -> MeetingRecapOutput {
         let parts = fullText.components(separatedBy: "---ACTION_ITEMS---")
         let markdown = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
         var actionItems: [MeetingActionItem] = []

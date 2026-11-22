@@ -2,193 +2,324 @@ import SwiftUI
 
 struct DashboardDictionaryView: View {
     @EnvironmentObject var settings: SettingsStore
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject var dictionary: DictionaryStore
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
-    @State private var terms: [String] = []
-    @State private var newTerm: String = ""
-    @State private var isLoading = false
-    @State private var isSaving = false
-    @State private var errorMessage: String?
+    @State private var isAddingInline = false
+    @State private var newHeard = ""
+    @State private var newWritten = ""
+    @FocusState private var heardFocused: Bool
 
-    private let maxTerms = 20
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    // Опциональная синхронизация терминов в облако gapi.uz
+    @State private var showGapiSync = false
+    @State private var gapiTerms: [String] = []
+    @State private var newGapiTerm = ""
+    @State private var isLoadingGapi = false
+    @State private var gapiError: String?
+
+    private let maxGapiTerms = 20
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Словарь терминов")
-                            .font(ClaudeFonts.pageTitle)
-                            .tracking(-0.35)
-                            .foregroundStyle(theme.ink)
-                        Text("Имена, бренды и термины, которые точнее распознаются в речи (до \(maxTerms) терминов на проект)")
-                            .font(ClaudeFonts.small)
-                            .foregroundStyle(theme.secondaryInk)
-                    }
+            VStack(alignment: .leading, spacing: 22) {
+                PaperPageHeader(
+                    "Словарь",
+                    subtitle: "Пары замен «слышится → пишется» применяются к каждому тексту после распознавания.",
+                    systemImage: "book.closed",
+                    tileTint: PaperTokens.dictionaryTeal
+                )
 
-                    Spacer()
-
-                    if isLoading || isSaving {
-                        ProgressView().controlSize(.small)
-                    }
-
-                    Button {
-                        Task { await load() }
-                    } label: {
-                        HStack(spacing: 5) {
-                            ClaudeIcon(name: "arrow.clockwise", size: 11, weight: .light)
-                            Text("Обновить")
-                        }
-                    }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
-                    .disabled(settings.gapiToken.isEmpty || isLoading)
-                }
-
-                if settings.gapiToken.isEmpty {
-                    VStack(spacing: 10) {
-                        ClaudeIcon(name: "key.slash", size: 22, weight: .ultraLight)
-                            .foregroundStyle(theme.warning)
-                        Text("Не задан токен gapi")
-                            .font(ClaudeFonts.uiMedium)
-                            .foregroundStyle(theme.ink)
-                        Text("Укажите API-токен в разделе «Настройки», чтобы синхронизировать словарь с console.gapi.uz.")
-                            .font(ClaudeFonts.small)
-                            .foregroundStyle(theme.secondaryInk)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 28)
-                    .claudeCard(theme, cornerRadius: 12, padding: 16)
-                } else {
-                    // Add term composer bar
-                    HStack(spacing: 8) {
-                        TextField("Новый термин (например, Korzinka или EPAM)", text: $newTerm)
-                            .textFieldStyle(.plain)
-                            .font(ClaudeFonts.ui)
-                            .foregroundStyle(theme.ink)
-                            .onSubmit(addTerm)
-
-                        Button("Добавить", action: addTerm)
-                            .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
-                            .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || terms.count >= maxTerms)
-                    }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
-                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(theme.border, lineWidth: 1)
-                    )
-
-                    if let errorMessage {
-                        HStack(spacing: 6) {
-                            ClaudeIcon(name: "exclamationmark.triangle", size: 11.5, weight: .light)
-                            Text(errorMessage)
-                                .font(ClaudeFonts.small)
-                        }
-                        .foregroundStyle(theme.danger)
-                    }
-
-                    if terms.isEmpty && !isLoading {
-                        VStack(spacing: 8) {
-                            ClaudeIcon(name: "book.closed", size: 22, weight: .ultraLight)
-                                .foregroundStyle(theme.tertiaryInk)
-                            Text("Словарь пока пуст")
-                                .font(ClaudeFonts.uiMedium)
-                                .foregroundStyle(theme.secondaryInk)
-                            Text("Добавьте до \(maxTerms) специфичных слов, аббревиатур или имён.")
-                                .font(ClaudeFonts.small)
-                                .foregroundStyle(theme.tertiaryInk)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 28)
-                        .claudeCard(theme, cornerRadius: 12, padding: 16)
+                VStack(spacing: 0) {
+                    if isAddingInline {
+                        inlineAddRow
                     } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(terms.enumerated()), id: \.element) { idx, term in
-                                HStack(spacing: 9) {
-                                    ClaudeIcon(name: "tag", size: 12, weight: .light)
-                                        .foregroundStyle(theme.secondaryInk)
-                                    Text(term)
-                                        .font(ClaudeFonts.ui)
-                                        .foregroundStyle(theme.ink)
-                                    Spacer()
-                                    Button {
-                                        remove(term)
-                                    } label: {
-                                        ClaudeIcon(name: "xmark", size: 10.5, weight: .light)
-                                            .foregroundStyle(theme.secondaryInk)
-                                            .frame(width: 24, height: 24)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Удалить термин")
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 9)
+                        Button {
+                            withAnimation(.easeOut(duration: 0.14)) {
+                                isAddingInline = true
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                heardFocused = true
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(PaperTokens.dictionaryTeal)
+                                Text("Новое слово")
+                                    .font(fonts.uiMedium)
+                                    .foregroundStyle(paperTheme.inkColor)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
 
-                                if idx < terms.count - 1 {
-                                    Divider().overlay(theme.border)
+                    if !dictionary.entries.isEmpty {
+                        Rectangle()
+                            .fill(paperTheme.borderColor)
+                            .frame(height: PaperTokens.hairline)
+
+                        ForEach(Array(dictionary.entries.enumerated()), id: \.element.id) { idx, entry in
+                            HStack(spacing: 12) {
+                                Text(entry.heard)
+                                    .font(fonts.body)
+                                    .foregroundStyle(paperTheme.secondaryInkColor)
+                                    .frame(minWidth: 120, alignment: .leading)
+
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 10.5, weight: .regular))
+                                    .foregroundStyle(paperTheme.tertiaryInkColor)
+
+                                Text(entry.written)
+                                    .font(fonts.bodyMedium)
+                                    .foregroundStyle(paperTheme.inkColor)
+
+                                Spacer()
+
+                                Button {
+                                    dictionary.remove(id: entry.id)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10.5, weight: .medium))
+                                        .foregroundStyle(paperTheme.secondaryInkColor)
+                                        .frame(width: 24, height: 24)
+                                        .contentShape(Rectangle())
                                 }
+                                .buttonStyle(.plain)
+                                .help("Удалить правило")
+                                .accessibilityLabel("Удалить замену \(entry.heard)")
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+
+                            if idx < dictionary.entries.count - 1 {
+                                Rectangle()
+                                    .fill(paperTheme.borderColor)
+                                    .frame(height: PaperTokens.hairline)
                             }
                         }
-                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(theme.border, lineWidth: 1)
-                        )
-
-                        Text("Использовано \(terms.count) из \(maxTerms) терминов")
-                            .font(ClaudeFonts.small.monospacedDigit())
-                            .foregroundStyle(theme.secondaryInk)
                     }
                 }
+                .background(
+                    paperTheme.isDark ? paperTheme.surfaceColor.opacity(0.92) : paperTheme.surfaceColor.opacity(0.84),
+                    in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                        .strokeBorder(paperTheme.borderColor, lineWidth: 0.75)
+                )
+
+                if dictionary.entries.isEmpty && !isAddingInline {
+                    Text("Например: «эпам → EPAM», «корзинка → Korzinka» или имя коллеги.")
+                        .font(fonts.caption)
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                        .padding(.horizontal, 4)
+                }
+
+                if !settings.gapiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    gapiVocabularySection
+                }
             }
-            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: 680, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
+            .padding(PaperTokens.contentPadding)
         }
-        .background(theme.canvas)
-        .task { await load() }
+        .background { PaperBackground() }
     }
 
-    private func addTerm() {
-        let trimmed = newTerm.trimmingCharacters(in: .whitespacesAndNewlines)
-        newTerm = ""
-        guard !trimmed.isEmpty, terms.count < maxTerms else { return }
-        guard !terms.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
-        terms.append(trimmed)
-        Task { await save() }
+    private var inlineAddRow: some View {
+        HStack(spacing: 10) {
+            PaperInsetField(cornerRadius: PaperTokens.chipRadius, horizontalPadding: 9, verticalPadding: 5) {
+                TextField("Слышится (например, эпам)", text: $newHeard)
+                    .textFieldStyle(.plain)
+                    .font(fonts.ui)
+                    .foregroundStyle(paperTheme.inkColor)
+                    .focused($heardFocused)
+                    .onSubmit { commitInlineAdd() }
+            }
+
+            Image(systemName: "arrow.right")
+                .font(.system(size: 11))
+                .foregroundStyle(paperTheme.secondaryInkColor)
+
+            PaperInsetField(cornerRadius: PaperTokens.chipRadius, horizontalPadding: 9, verticalPadding: 5) {
+                TextField("Пишется (EPAM)", text: $newWritten)
+                    .textFieldStyle(.plain)
+                    .font(fonts.ui)
+                    .foregroundStyle(paperTheme.inkColor)
+                    .onSubmit { commitInlineAdd() }
+            }
+
+            Button("Добавить") {
+                commitInlineAdd()
+            }
+            .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
+            .disabled(newHeard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      || newWritten.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button {
+                withAnimation(.easeOut(duration: 0.14)) {
+                    newHeard = ""
+                    newWritten = ""
+                    isAddingInline = false
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Отменить добавление")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
-    private func remove(_ term: String) {
-        terms.removeAll { $0 == term }
-        Task { await save() }
+    private func commitInlineAdd() {
+        let heard = newHeard.trimmingCharacters(in: .whitespacesAndNewlines)
+        let written = newWritten.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !heard.isEmpty, !written.isEmpty else { return }
+        dictionary.add(heard: heard, written: written)
+        newHeard = ""
+        newWritten = ""
+        isAddingInline = false
     }
 
-    private func load() async {
+    // MARK: - Optional gapi.uz Cloud Vocabulary
+
+    private var gapiVocabularySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    showGapiSync.toggle()
+                }
+                if showGapiSync && gapiTerms.isEmpty {
+                    Task { await loadGapi() }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: showGapiSync ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .medium))
+                    Text("Подсказки для gapi.uz (\(gapiTerms.count)/\(maxGapiTerms))")
+                        .font(fonts.captionMedium)
+                    Spacer()
+                }
+                .foregroundStyle(paperTheme.secondaryInkColor)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showGapiSync {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Эти термины отправляются в проект gapi.uz как подсказки распознавания.")
+                        .font(fonts.caption)
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+
+                    HStack(spacing: 8) {
+                        PaperInsetField(cornerRadius: PaperTokens.chipRadius, horizontalPadding: 9, verticalPadding: 5) {
+                            TextField("Термин для gapi.uz", text: $newGapiTerm)
+                                .textFieldStyle(.plain)
+                                .font(fonts.ui)
+                                .foregroundStyle(paperTheme.inkColor)
+                                .onSubmit { addGapiTerm() }
+                        }
+
+                        Button("Добавить", action: addGapiTerm)
+                            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                            .disabled(newGapiTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || gapiTerms.count >= maxGapiTerms)
+
+                        if isLoadingGapi {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+
+                    if let gapiError {
+                        HStack(spacing: 8) {
+                            Text(gapiError)
+                                .font(fonts.caption)
+                                .foregroundStyle(paperTheme.errorColor)
+                            Spacer()
+                            Button("Повторить") {
+                                Task { await loadGapi() }
+                            }
+                            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                        }
+                    }
+
+                    if !gapiTerms.isEmpty {
+                        ClaudeFlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                            ForEach(gapiTerms, id: \.self) { term in
+                                HStack(spacing: 5) {
+                                    Text(term)
+                                        .font(fonts.caption)
+                                        .foregroundStyle(paperTheme.inkColor)
+                                    Button {
+                                        gapiTerms.removeAll { $0 == term }
+                                        Task { await saveGapi() }
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 9, weight: .medium))
+                                            .foregroundStyle(paperTheme.secondaryInkColor)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.chipRadius)
+                            }
+                        }
+                    }
+                }
+                .padding(14)
+                .background(
+                    paperTheme.surfaceColor.opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                        .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+                )
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    private func addGapiTerm() {
+        let trimmed = newGapiTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        newGapiTerm = ""
+        guard !trimmed.isEmpty, gapiTerms.count < maxGapiTerms else { return }
+        guard !gapiTerms.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        gapiTerms.append(trimmed)
+        Task { await saveGapi() }
+    }
+
+    private func loadGapi() async {
         guard !settings.gapiToken.isEmpty else { return }
-        isLoading = true
-        defer { isLoading = false }
+        isLoadingGapi = true
+        defer { isLoadingGapi = false }
         do {
-            terms = try await GapiClient(token: settings.gapiToken).getVocabulary()
-            errorMessage = nil
+            gapiTerms = try await GapiClient(token: settings.gapiToken).getVocabulary()
+            gapiError = nil
         } catch {
-            errorMessage = error.localizedDescription
+            gapiError = error.localizedDescription
         }
     }
 
-    private func save() async {
+    private func saveGapi() async {
         guard !settings.gapiToken.isEmpty else { return }
-        isSaving = true
-        defer { isSaving = false }
+        isLoadingGapi = true
+        defer { isLoadingGapi = false }
         do {
-            try await GapiClient(token: settings.gapiToken).setVocabulary(terms)
-            errorMessage = nil
+            try await GapiClient(token: settings.gapiToken).setVocabulary(gapiTerms)
+            gapiError = nil
         } catch {
-            errorMessage = error.localizedDescription
+            gapiError = error.localizedDescription
         }
     }
 }

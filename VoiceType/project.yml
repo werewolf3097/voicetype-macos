@@ -39,11 +39,33 @@ targets:
       - path: VoiceTypeTests
       - path: VoiceType/Sources/AudioCompressor.swift
       - path: VoiceType/Sources/TranscriptionProvider.swift
+      - path: VoiceType/Sources/WhisperWindowsClient.swift
+      - path: VoiceType/Sources/CloudAudioSTTProviders.swift
       - path: VoiceType/Sources/HomeServerProvider.swift
       - path: VoiceType/Sources/HistoryStore.swift
       - path: VoiceType/Sources/GapiClient.swift
       - path: VoiceType/Sources/RussianTransliterator.swift
       - path: VoiceType/Sources/TranscriptionProgress.swift
+      - path: VoiceType/Sources/PaperTheme.swift
+      - path: VoiceType/Sources/PaperTextureGenerator.swift
+      - path: VoiceType/Sources/HotkeyStateMachine.swift
+      - path: VoiceType/Sources/DictionaryStore.swift
+      - path: VoiceType/Sources/TextInjector.swift
+      - path: VoiceType/Sources/SettingsStore.swift
+      - path: VoiceType/Sources/KeychainStore.swift
+      - path: VoiceType/Sources/DockIconController.swift
+      - path: VoiceType/Sources/UzbekDialectConverter.swift
+      - path: VoiceType/Sources/PermissionsHelper.swift
+      - path: VoiceType/Sources/AudioRecorder.swift
+      - path: VoiceType/Sources/AudioInputDeviceManager.swift
+      - path: VoiceType/Sources/SoundCuePlayer.swift
+      - path: VoiceType/Sources/LLMPostProcessor.swift
+      - path: VoiceType/Sources/ClaudeClient.swift
+      - path: VoiceType/Sources/MeetingsStore.swift
+      - path: VoiceType/Sources/MeetingRecapGenerator.swift
+      - path: VoiceType/Sources/PaperComponents.swift
+      - path: VoiceType/Sources/RecordingIndicatorView.swift
+      - path: VoiceType/Sources/RecordingIndicatorController.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farrukh.voicetype.tests

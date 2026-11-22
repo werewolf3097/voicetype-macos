@@ -4,12 +4,15 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject var history: HistoryStore
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
     @Environment(\.dismiss) private var dismiss
 
     @State private var windowBox = MenuBarWindowBox()
+    @State private var copiedLast = false
 
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private func dismissMenuBar() {
         dismiss()
@@ -24,59 +27,49 @@ struct MenuBarView: View {
 
             if case .error(let message) = appState.status {
                 HStack(spacing: 7) {
-                    ClaudeIcon(name: "exclamationmark.triangle", size: 12, weight: .light)
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11.5))
                     Text(message)
-                        .font(ClaudeFonts.small)
+                        .font(fonts.caption)
                 }
-                .foregroundStyle(theme.danger)
+                .foregroundStyle(paperTheme.errorColor)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(theme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(paperTheme.errorColor.opacity(0.08), in: RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous))
             }
 
-            if !appState.hotkeyActive || !appState.microphoneAuthorized || (settings.autoPaste && !appState.accessibilityAuthorized) {
+            if !appState.hotkeyActive || !appState.microphoneAuthorized || (settings.pasteMode == .autoPaste && !appState.accessibilityAuthorized) {
                 permissionWarning
             }
 
-            Divider().overlay(theme.border)
+            if let last = history.records.first, !last.text.isEmpty {
+                hairlineDivider
+                lastDictationCompact(last)
+            }
+
+            hairlineDivider
 
             if appState.activeMeetingID != nil {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(theme.danger)
-                            .frame(width: 7, height: 7)
-                        Text("Запись встречи")
-                            .font(ClaudeFonts.smallSemibold)
-                            .foregroundStyle(theme.danger)
-                        Spacer()
-                        Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
-                            .font(ClaudeFonts.smallMedium.monospacedDigit())
-                            .foregroundStyle(theme.secondaryInk)
-                    }
-
-                    Button {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(PaperTokens.recordingRed)
+                        .frame(width: 7, height: 7)
+                    Text("Встреча · \(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))")
+                        .font(fonts.captionMedium.monospacedDigit())
+                        .foregroundStyle(paperTheme.inkColor)
+                    Spacer()
+                    Button("Завершить") {
                         dismissMenuBar()
                         appState.finishMeeting()
                         DashboardWindowController.shared.show(section: .meetings)
-                    } label: {
-                        HStack(spacing: 6) {
-                            ClaudeIcon(name: "stop.circle", size: 12, weight: .regular)
-                            Text("Завершить и создать рекап")
-                        }
-                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
-
-                    ClaudeMenuRowButton("Открыть блокнот встречи…", systemImage: "doc.text") {
-                        dismissMenuBar()
-                        DashboardWindowController.shared.show(section: .meetings)
-                    }
+                    .buttonStyle(PaperButtonStyle(role: .destructive, compact: true))
                 }
+                .padding(.horizontal, 4)
             } else {
-                Button {
+                PaperMenuRowButton("Начать запись встречи", systemImage: "person.2") {
                     dismissMenuBar()
                     if let id = appState.startMeeting(
                         template: .general,
@@ -85,109 +78,131 @@ struct MenuBarView: View {
                         appState.selectedMeetingID = id
                     }
                     DashboardWindowController.shared.show(section: .meetings)
-                } label: {
-                    HStack(spacing: 6) {
-                        ClaudeIcon(name: "plus", size: 11.5, weight: .medium)
-                        Text("Начать запись встречи")
-                    }
-                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
             }
 
-            Divider().overlay(theme.border)
+            hairlineDivider
 
             VStack(alignment: .leading, spacing: 2) {
-                ClaudeMenuRowButton("Открыть VoiceType", systemImage: "macwindow") {
+                PaperMenuRowButton("Открыть VoiceType", systemImage: "macwindow") {
                     dismissMenuBar()
                     DashboardWindowController.shared.show(section: .home)
                 }
 
-                ClaudeMenuRowButton("Встречи и рекапы…", systemImage: "person.2") {
-                    dismissMenuBar()
-                    DashboardWindowController.shared.show(section: .meetings)
-                }
-
-                ClaudeMenuRowButton("Настройки…", systemImage: "gearshape", shortcut: "⌘,") {
+                PaperMenuRowButton("Настройки…", systemImage: "gearshape", shortcut: "⌘,") {
                     dismissMenuBar()
                     DashboardWindowController.shared.show(section: .settings)
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
 
-            Divider().overlay(theme.border)
+            hairlineDivider
 
-            ClaudeMenuRowButton("Выйти из VoiceType", systemImage: "power", shortcut: "⌘Q") {
+            PaperMenuRowButton("Выйти из VoiceType", systemImage: "power", shortcut: "⌘Q") {
                 dismissMenuBar()
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
         }
         .padding(10)
-        .frame(width: 274)
-        .background(theme.canvas)
+        .frame(width: 280)
+        .background(paperTheme.baseColor)
         .background(MenuBarWindowAccessor(box: windowBox))
-        .tint(theme.accent)
-        .preferredColorScheme(settings.appearance.colorScheme)
         .onAppear { appState.refreshPermissionsAndHotkey() }
+    }
+
+    private var hairlineDivider: some View {
+        Rectangle()
+            .fill(paperTheme.borderColor)
+            .frame(height: PaperTokens.hairline)
     }
 
     private var statusHeader: some View {
         HStack(spacing: 9) {
-            statusIcon
-                .frame(width: 24, height: 24)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Circle()
+                .fill(statusDotColor)
+                .frame(width: 8, height: 8)
+                .padding(.leading, 4)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(statusTitle)
-                    .font(ClaudeFonts.uiMedium)
-                    .foregroundStyle(theme.ink)
+                    .font(fonts.uiMedium)
+                    .foregroundStyle(paperTheme.inkColor)
                 Text(hotkeyHint)
-                    .font(ClaudeFonts.micro)
-                    .foregroundStyle(theme.secondaryInk)
+                    .font(fonts.micro)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
                     .lineLimit(1)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 4)
         .padding(.vertical, 3)
     }
 
-    private var hotkeyHint: String {
-        settings.recordingMode == .toggle
-            ? "\(settings.hotkey.rawValue) · старт/стоп"
-            : "\(settings.hotkey.rawValue) · удержание"
+    private var statusDotColor: Color {
+        if !appState.hotkeyActive || !appState.microphoneAuthorized {
+            return paperTheme.errorColor
+        }
+        switch appState.status {
+        case .idle: return paperTheme.successColor
+        case .recording: return PaperTokens.recordingRed
+        case .transcribing, .cleaning: return paperTheme.clipboardWarningColor
+        case .error: return paperTheme.errorColor
+        }
     }
 
-    @ViewBuilder
-    private var statusIcon: some View {
-        switch appState.status {
-        case .idle:
-            ClaudeIcon(name: "mic", size: 12.5, weight: .light)
-                .foregroundStyle(theme.accent)
-        case .recording:
-            ClaudeIcon(name: "waveform", size: 12.5, weight: .regular)
-                .symbolEffect(.variableColor.iterative, isActive: true)
-                .foregroundStyle(theme.danger)
-        case .transcribing, .cleaning:
-            ClaudeIcon(name: "waveform", size: 12.5, weight: .regular)
-                .symbolEffect(.pulse, isActive: true)
-                .foregroundStyle(theme.accent)
-        case .error:
-            ClaudeIcon(name: "exclamationmark.triangle", size: 12.5, weight: .light)
-                .foregroundStyle(theme.warning)
-        }
+    private var hotkeyHint: String {
+        "\(settings.shortcutDisplayLabel) · \(settings.shortcutMode.shortTitle)"
     }
 
     private var statusTitle: String {
+        if !appState.microphoneAuthorized {
+            return "Нет доступа к микрофону"
+        }
+        if !appState.hotkeyActive {
+            return "Хоткей не работает"
+        }
         switch appState.status {
-        case .idle: return "Готов к диктовке"
+        case .idle: return "Готов"
         case .recording: return "Идёт запись…"
-        case .transcribing: return "Распознавание…"
-        case .cleaning: return "Обработка текста…"
+        case .transcribing: return "Распознаю…"
+        case .cleaning: return "Привожу в порядок…"
         case .error: return "Ошибка"
         }
+    }
+
+    private func lastDictationCompact(_ record: TranscriptionRecord) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Последняя диктовка")
+                    .font(fonts.micro)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+                Spacer()
+                Button {
+                    TextInjector.copyToClipboard(record.text)
+                    copiedLast = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        copiedLast = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: copiedLast ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10))
+                        Text(copiedLast ? "Скопировано" : "Копировать")
+                    }
+                }
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+            }
+
+            Text(record.text)
+                .font(fonts.caption)
+                .foregroundStyle(paperTheme.inkColor)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .paperSurface(level: .l1Inset, cornerRadius: PaperTokens.chipRadius)
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
@@ -214,8 +229,8 @@ struct MenuBarView: View {
                 }
             }
 
-            if settings.autoPaste && !appState.accessibilityAuthorized {
-                permissionAction("Нет доступа к Accessibility", buttonTitle: "Разрешить") {
+            if settings.pasteMode == .autoPaste && !appState.accessibilityAuthorized {
+                permissionAction("Нет «Универсального доступа» (в буфер)", buttonTitle: "Открыть") {
                     dismissMenuBar()
                     PermissionsHelper.openAccessibilitySettings()
                 }
@@ -223,18 +238,18 @@ struct MenuBarView: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(paperTheme.clipboardWarningColor.opacity(0.10), in: RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous))
     }
 
     private func permissionAction(_ title: String, buttonTitle: String, action: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(ClaudeFonts.small)
-                .foregroundStyle(theme.warning)
+                .font(fonts.caption)
+                .foregroundStyle(paperTheme.inkColor)
                 .lineLimit(2)
             Spacer()
             Button(buttonTitle, action: action)
-                .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
         }
     }
 }
@@ -272,8 +287,9 @@ private struct MenuBarWindowAccessor: NSViewRepresentable {
     }
 }
 
-private struct ClaudeMenuRowButton: View {
-    @Environment(\.colorScheme) private var colorScheme
+private struct PaperMenuRowButton: View {
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     let title: String
     let systemImage: String
@@ -290,35 +306,36 @@ private struct ClaudeMenuRowButton: View {
     }
 
     var body: some View {
-        let theme = ClaudeTheme(scheme: colorScheme)
+        let fonts = PaperFonts(preset: fontPreset)
         Button {
             isHovered = false
             action()
         } label: {
             HStack(spacing: 8) {
-                ClaudeIcon(name: systemImage, size: 12.5, weight: isHovered ? .regular : .light)
+                Image(systemName: systemImage)
+                    .font(.system(size: 12.5, weight: isHovered ? .medium : .regular))
                     .frame(width: 16)
-                    .foregroundStyle(isHovered ? theme.ink : theme.secondaryInk)
+                    .foregroundStyle(isHovered ? paperTheme.inkColor : paperTheme.secondaryInkColor)
                 Text(title)
-                    .font(ClaudeFonts.ui)
-                    .foregroundStyle(theme.ink)
+                    .font(fonts.ui)
+                    .foregroundStyle(paperTheme.inkColor)
                 Spacer()
                 if let shortcut {
                     Text(shortcut)
-                        .font(ClaudeFonts.micro)
-                        .foregroundStyle(isHovered ? theme.secondaryInk : theme.tertiaryInk)
+                        .font(fonts.micro)
+                        .foregroundStyle(isHovered ? paperTheme.secondaryInkColor : paperTheme.tertiaryInkColor)
                 }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isHovered ? theme.hoverFill : Color.clear)
+                RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
+                    .fill(isHovered ? paperTheme.hoverColor : Color.clear)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(isHovered ? theme.border : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
+                    .strokeBorder(isHovered ? paperTheme.borderColor : Color.clear, lineWidth: PaperTokens.hairline)
             )
             .contentShape(Rectangle())
             .animation(.easeOut(duration: 0.1), value: isHovered)

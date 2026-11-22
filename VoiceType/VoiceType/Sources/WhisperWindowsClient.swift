@@ -214,14 +214,14 @@ struct WhisperWindowsClient: Sendable {
 
     // MARK: - VAD & Audio Slicing
 
-    private struct SpeechSlice: Sendable {
+    struct SpeechSlice: Sendable {
         let startFrame: AVAudioFramePosition
         let endFrame: AVAudioFramePosition
         let startSeconds: Double
         let durationSeconds: Double
     }
 
-    private struct AudioScanResult: Sendable {
+    struct AudioScanResult: Sendable {
         let totalDurationSeconds: Double
         let slices: [SpeechSlice]
         var totalSpeechDuration: Double {
@@ -229,7 +229,11 @@ struct WhisperWindowsClient: Sendable {
         }
     }
 
-    private static func analyzeSpeechSlices(fileURL: URL) throws -> AudioScanResult {
+    static func analyzeSpeechSlices(
+        fileURL: URL,
+        maxSliceSeconds: Double = 75,
+        splitSearchStartSeconds: Double = 50
+    ) throws -> AudioScanResult {
         let audioFile: AVAudioFile
         do {
             audioFile = try AVAudioFile(forReading: fileURL)
@@ -321,9 +325,9 @@ struct WhisperWindowsClient: Sendable {
             }
         }
 
-        // Extract contiguous spans and split long spans (> 75s) at lowest-energy windows
-        let maxSliceWindows = 750 // 75s
-        let splitSearchStartOffset = 500 // 50s
+        // Extract contiguous spans and split long spans at lowest-energy windows
+        let maxSliceWindows = max(50, Int((maxSliceSeconds / windowDuration).rounded()))
+        let splitSearchStartOffset = max(10, min(maxSliceWindows - 10, Int((splitSearchStartSeconds / windowDuration).rounded())))
         var slices: [SpeechSlice] = []
 
         var i = 0
@@ -384,7 +388,7 @@ struct WhisperWindowsClient: Sendable {
         return AudioScanResult(totalDurationSeconds: totalDuration, slices: slices)
     }
 
-    private static func exportSliceToTempWAV(sourceURL: URL, slice: SpeechSlice) throws -> URL {
+    static func exportSliceToTempWAV(sourceURL: URL, slice: SpeechSlice) throws -> URL {
         let srcFile = try AVAudioFile(forReading: sourceURL)
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("voicetype-slice-\(UUID().uuidString).wav")
@@ -431,7 +435,7 @@ struct WhisperWindowsClient: Sendable {
 
     // MARK: - Inference HTTP Request
 
-    private struct VerboseResponse: Decodable {
+    struct VerboseResponse: Decodable {
         struct Segment: Decodable {
             let id: Int?
             let text: String?
@@ -542,7 +546,7 @@ struct WhisperWindowsClient: Sendable {
         ]
     }
 
-    private static func buildPrompt(customTerms: [String]) -> String {
+    static func buildPrompt(customTerms: [String]) -> String {
         var terms = defaultVocabularyPrompt
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -611,7 +615,7 @@ struct WhisperWindowsClient: Sendable {
         return hallucinationMarkers.contains(where: { lower.contains($0) })
     }
 
-    private static func sanitizeSegmentText(_ raw: String, avgLogProb: Double?) -> String? {
+    static func sanitizeSegmentText(_ raw: String, avgLogProb: Double?) -> String? {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
 
@@ -669,7 +673,7 @@ struct WhisperWindowsClient: Sendable {
         return s
     }
 
-    private static func mergeAndCleanSegments(_ segments: [GapiTranscription.Segment]) -> [GapiTranscription.Segment] {
+    static func mergeAndCleanSegments(_ segments: [GapiTranscription.Segment]) -> [GapiTranscription.Segment] {
         let sorted = segments.sorted { a, b in
             let sa = a.start ?? 0
             let sb = b.start ?? 0

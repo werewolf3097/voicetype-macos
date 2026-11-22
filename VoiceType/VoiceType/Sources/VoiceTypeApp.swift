@@ -6,6 +6,7 @@ struct VoiceTypeApp: App {
     @StateObject private var settings: SettingsStore
     @StateObject private var history: HistoryStore
     @StateObject private var appState: AppState
+    @StateObject private var entitlement = LocalProEntitlement()
 
     init() {
         ClaudeFonts.registerBundledFonts()
@@ -18,7 +19,8 @@ struct VoiceTypeApp: App {
         DashboardWindowController.shared.configure(
             appState: state,
             settings: settingsStore,
-            history: historyStore
+            history: historyStore,
+            entitlement: entitlement
         )
     }
 
@@ -27,7 +29,11 @@ struct VoiceTypeApp: App {
             MenuBarView()
                 .environmentObject(appState)
                 .environmentObject(settings)
+                .environmentObject(history)
                 .environmentObject(appState.meetings)
+                .environmentObject(entitlement)
+                .environment(\.proEntitlement, entitlement)
+                .applyPaperEnvironment(settings)
         } label: {
             MenuBarIcon(status: appState.status)
         }
@@ -38,12 +44,17 @@ struct VoiceTypeApp: App {
                 .environmentObject(appState)
                 .environmentObject(settings)
                 .environmentObject(history)
+                .environmentObject(appState.dictionary)
                 .environmentObject(appState.meetings)
+                .environmentObject(entitlement)
+                .environment(\.proEntitlement, entitlement)
+                .applyPaperEnvironment(settings)
         }
     }
 }
 
 private struct MenuBarIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: RecordingStatus
 
     var body: some View {
@@ -51,14 +62,18 @@ private struct MenuBarIcon: View {
             switch status {
             case .idle:
                 Image(systemName: "mic")
+                    .accessibilityLabel("VoiceType готов")
             case .recording:
                 Image(systemName: "waveform")
-                    .symbolEffect(.variableColor.iterative, isActive: true)
+                    .symbolEffect(.variableColor.iterative, isActive: !reduceMotion)
+                    .accessibilityLabel("Идёт запись")
             case .transcribing, .cleaning:
                 Image(systemName: "waveform")
-                    .symbolEffect(.pulse, isActive: true)
+                    .symbolEffect(.pulse, isActive: !reduceMotion)
+                    .accessibilityLabel("Обработка речи")
             case .error:
                 Image(systemName: "exclamationmark.triangle")
+                    .accessibilityLabel("Ошибка VoiceType")
             }
         }
     }

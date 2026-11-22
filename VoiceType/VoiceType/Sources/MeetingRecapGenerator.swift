@@ -8,8 +8,20 @@ struct MeetingRecapOutput {
 enum MeetingRecapGenerator {
     static func generate(
         for meeting: MeetingRecord,
-        anthropicApiKey: String
+        anthropicApiKey: String,
+        llmConfig: LLMConfiguration? = nil
     ) async -> MeetingRecapOutput {
+        if let llmConfig, llmConfig.isConfigured, !meeting.segments.isEmpty || !meeting.rawNotes.isEmpty {
+            do {
+                if llmConfig.provider == .anthropic {
+                    return try await ClaudeClient(apiKey: llmConfig.trimmedKey).generateMeetingRecap(for: meeting)
+                }
+                return try await LLMPostProcessor(config: llmConfig).generateMeetingRecap(for: meeting)
+            } catch {
+                // Fall back to local recap builder if LLM fails
+            }
+        }
+
         let trimmedKey = anthropicApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedKey.isEmpty, !meeting.segments.isEmpty || !meeting.rawNotes.isEmpty {
             do {
