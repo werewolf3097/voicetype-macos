@@ -66,59 +66,81 @@ struct GapiTranscriptionProvider: TranscriptionProvider {
     }
 }
 
-/// Координатор диктовки: при выключенном переключателе использует только Gapi;
-/// при включённом — отправляет на домашний шлюз и автоматически переключается на Gapi,
-/// если шлюз недоступен (Tailscale выключен, 502 или таймаут).
+/// Координатор диктовки: последовательно пробует настроенные провайдеры из списка очередности
+/// и автоматически переключается на следующий шаг при недоступности или ошибке предыдущего.
 struct DictationTranscriptionCoordinator: Sendable {
-    let primary: any TranscriptionProvider
-    let fallback: (any TranscriptionProvider)?
+    let providers: [any TranscriptionProvider]
+    let enforceHomeFallbackPolicyForSingleFallback: Bool
     let onFallback: (@Sendable (String) -> Void)?
+
+    init(
+        providers: [any TranscriptionProvider],
+        onFallback: (@Sendable (String) -> Void)? = nil
+    ) {
+        self.providers = providers
+        self.enforceHomeFallbackPolicyForSingleFallback = false
+        self.onFallback = onFallback
+    }
 
     init(
         primary: any TranscriptionProvider,
         fallback: (any TranscriptionProvider)? = nil,
         onFallback: (@Sendable (String) -> Void)? = nil
     ) {
-        self.primary = primary
-        self.fallback = fallback
+        var list: [any TranscriptionProvider] = [primary]
+        if let fallback {
+            list.append(fallback)
+        }
+        self.providers = list
+        self.enforceHomeFallbackPolicyForSingleFallback = true
         self.onFallback = onFallback
     }
 
     func transcribe(fileURL: URL) async throws -> TranscriptionResult {
-        let startedAt = CFAbsoluteTimeGetCurrent()
-        do {
-            let result = try await primary.transcribe(fileURL: fileURL)
-            let totalMs = max(result.latencyMs, Int(((CFAbsoluteTimeGetCurrent() - startedAt) * 1000).rounded()))
-            return TranscriptionResult(
-                text: result.text,
-                languageCode: result.languageCode,
-                languageSummary: result.languageSummary,
-                engine: result.engine,
-                latencyMs: totalMs,
-                audioSeconds: result.audioSeconds,
-                fallbackFrom: result.fallbackFrom,
-                note: result.note
-            )
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            guard let fallback, HomeServerError.shouldFallbackToGapi(error) else {
-                throw error
-            }
-            let reason = HomeServerError.shortFallbackReason(for: error)
-            onFallback?(reason)
-            let gapiResult = try await fallback.transcribe(fileURL: fileURL)
-            let totalMs = max(0, Int(((CFAbsoluteTimeGetCurrent() - startedAt) * 1000).rounded()))
-            return TranscriptionResult(
-                text: gapiResult.text,
-                languageCode: gapiResult.languageCode,
-                languageSummary: gapiResult.languageSummary,
-                engine: gapiResult.engine,
-                latencyMs: totalMs,
-                audioSeconds: gapiResult.audioSeconds,
-                fallbackFrom: primary.providerName,
-                note: gapiResult.note
-            )
+        guard !providers.isEmpty else {
+            throw HomeServerError.invalidURL("Не настроен ни один сервис распознавания речи.")
         }
+
+        let startedAt = CFAbsoluteTimeGetCurrent()
+        var firstFailedProvider: String?
+
+        for (index, provider) in providers.enumerated() {
+            try Task.checkCancellation()
+            do {
+                let result = try await provider.transcribe(fileURL: fileURL)
+                let totalMs = max(result.latencyMs, Int(((CFAbsoluteTimeGetCurrent() - startedAt) * 1000).rounded()))
+                return TranscriptionResult(
+                    text: result.text,
+                    languageCode: result.languageCode,
+                    languageSummary: result.languageSummary,
+                    engine: result.engine,
+                    latencyMs: totalMs,
+                    audioSeconds: result.audioSeconds,
+                    fallbackFrom: result.fallbackFrom ?? firstFailedProvider,
+                    note: result.note
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let urlError as URLError where urlError.code == .cancelled {
+                throw urlError
+            } catch {
+                let hasNext = index + 1 < providers.count
+                if !hasNext {
+                    throw error
+                }
+                if enforceHomeFallbackPolicyForSingleFallback && provider is HomeServerProvider && !HomeServerError.shouldFallbackToGapi(error) {
+                    throw error
+                }
+                if firstFailedProvider == nil {
+                    firstFailedProvider = provider.providerName
+                }
+                let reason = (provider is HomeServerProvider)
+                    ? HomeServerError.shortFallbackReason(for: error)
+                    : error.localizedDescription
+                onFallback?("\(provider.providerName): \(reason)")
+            }
+        }
+
+        throw HomeServerError.invalidURL("Не удалось распознать речь.")
     }
 }

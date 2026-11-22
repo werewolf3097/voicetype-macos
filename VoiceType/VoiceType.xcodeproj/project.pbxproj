@@ -17,6 +17,7 @@
 		1600349D731E16AB7B7AB5DF /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = DEF92EBB6413802A0028C4C2 /* Fonts */; };
 		1693D9083766D1FBE308129D /* DashboardMeetingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 434B7FF79F533D836E0BAE02 /* DashboardMeetingsView.swift */; };
 		1779AC5DE7116E15A868B607 /* PaperTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87F6245A79B7E7E8AE9738A4 /* PaperTheme.swift */; };
+		1F8AB3AF755CB2FE32F979C9 /* CloudAudioSTTProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB966757AD357062FC22D14 /* CloudAudioSTTProviders.swift */; };
 		1FF49DBD6A9AA52862A9988B /* HotkeyStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F3EE9B4764043FC3A74473 /* HotkeyStateMachine.swift */; };
 		2422154AA3C87EFD49F5F78B /* HomeServerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852F823EA043399D5BD32BC2 /* HomeServerProvider.swift */; };
 		25550EC35ABA028C40673C7F /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8254E25852DB8ED4DF25042 /* SettingsStore.swift */; };
@@ -28,6 +29,7 @@
 		3146B548770F3B5D8F4B0B67 /* MeetingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231D013701E52125293C80A0 /* MeetingsStore.swift */; };
 		3203C863633842595F68C393 /* HotkeyStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F3EE9B4764043FC3A74473 /* HotkeyStateMachine.swift */; };
 		38125EA2E57140B4C8106740 /* MockGatewayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82B3833A4F6D037A5C9A79DB /* MockGatewayServer.swift */; };
+		3F33A0D50BB4C169004046D3 /* WhisperWindowsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8455EAEE007AA71EE994CD /* WhisperWindowsClient.swift */; };
 		40C69FD7C5714D80A9203E14 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413F19B4B726CDF7049FCAFF /* MenuBarView.swift */; };
 		42A7E19956C92C8879E1D911 /* UzbekDialectConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2762FB627A74AD05CC115BA2 /* UzbekDialectConverter.swift */; };
 		42B46DEA5A8690425CE51D7F /* SoundCuePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D218C2203FFB17212965844C /* SoundCuePlayer.swift */; };
@@ -44,6 +46,7 @@
 		76190F56FD017AC44CFF97E6 /* RecordingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF5C060AAEFC6E9B4EF67A5 /* RecordingIndicatorView.swift */; };
 		837225E268A7306EB61427D1 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F951730C87188297E4F9270C /* SettingsView.swift */; };
 		8547DC9728A443DD16144648 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 219237FAD744F137F793AFD3 /* AudioCompressor.swift */; };
+		89CB0521D4CDAABD3470C7AB /* CloudAudioSTTProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB966757AD357062FC22D14 /* CloudAudioSTTProviders.swift */; };
 		89D39DE22CF019EEEFD0AE64 /* MeetingAudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73E5435AA03DBC6D29208BD0 /* MeetingAudioRecorder.swift */; };
 		8BA07D5F4048426AEB6D1120 /* Phase6AudioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9425F151547C3AF7D4F93F8B /* Phase6AudioTests.swift */; };
 		901FC3BEB723A080F24CE0B3 /* DashboardDictionaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0865A1C6BFA9FD9C2D0DE740 /* DashboardDictionaryView.swift */; };
@@ -110,6 +113,7 @@
 		70D7C9B125AD39E9D080C12A /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		715FDB0292B41137BBE0B825 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		73E5435AA03DBC6D29208BD0 /* MeetingAudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAudioRecorder.swift; sourceTree = "<group>"; };
+		7CB966757AD357062FC22D14 /* CloudAudioSTTProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAudioSTTProviders.swift; sourceTree = "<group>"; };
 		7DBE8882C3E9EADEF8DAD748 /* DictionaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryStore.swift; sourceTree = "<group>"; };
 		7FCBCBE03E7CB856522FE484 /* MeetingRecapGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRecapGenerator.swift; sourceTree = "<group>"; };
 		82B3833A4F6D037A5C9A79DB /* MockGatewayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockGatewayServer.swift; sourceTree = "<group>"; };
@@ -171,6 +175,7 @@
 				358AB5B314F5339BC687EB72 /* AudioRecorder.swift */,
 				C4788B416BBA06D7AD88708F /* ClaudeClient.swift */,
 				927E09303D17328F64E20461 /* ClaudeTheme.swift */,
+				7CB966757AD357062FC22D14 /* CloudAudioSTTProviders.swift */,
 				0865A1C6BFA9FD9C2D0DE740 /* DashboardDictionaryView.swift */,
 				4867DFE5229711CA29F6228C /* DashboardHistoryView.swift */,
 				2C69AFF8A2BDE3F922F021D4 /* DashboardHomeView.swift */,
@@ -335,6 +340,7 @@
 				A979F3D0446F2BEB658329C1 /* AudioInputDeviceManager.swift in Sources */,
 				EEB2B2C72D0941509F1ED6B5 /* AudioRecorder.swift in Sources */,
 				D2B6BCF7669F43D47F763CD0 /* ClaudeClient.swift in Sources */,
+				89CB0521D4CDAABD3470C7AB /* CloudAudioSTTProviders.swift in Sources */,
 				290A4158146C90D765892C87 /* DictionaryStore.swift in Sources */,
 				5C16B1B33AEF73DA771C2EE1 /* DockIconController.swift in Sources */,
 				D875CD782142CFEE06F7312F /* GapiClient.swift in Sources */,
@@ -365,6 +371,7 @@
 				73127A097B3ED05F2DE50CE5 /* TranscriptionProgress.swift in Sources */,
 				46F6BC3694AAC48599DFBAD1 /* TranscriptionProvider.swift in Sources */,
 				42A7E19956C92C8879E1D911 /* UzbekDialectConverter.swift in Sources */,
+				3F33A0D50BB4C169004046D3 /* WhisperWindowsClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -379,6 +386,7 @@
 				5FA1318088412336D0D1361E /* AudioRecorder.swift in Sources */,
 				30CA5392433C844011C08AD8 /* ClaudeClient.swift in Sources */,
 				F6B8B11C55B68FAB55AFFBF2 /* ClaudeTheme.swift in Sources */,
+				1F8AB3AF755CB2FE32F979C9 /* CloudAudioSTTProviders.swift in Sources */,
 				901FC3BEB723A080F24CE0B3 /* DashboardDictionaryView.swift in Sources */,
 				A9B87AC54BC47816FDED75EB /* DashboardHistoryView.swift in Sources */,
 				E97AD2359099DDAF2F15DD9C /* DashboardHomeView.swift in Sources */,

@@ -467,10 +467,10 @@ struct DashboardSettingsView: View {
 
     private var apiKeysGroup: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PaperSettingGroup("Распознавание речи (STT)") {
+            PaperSettingGroup("Распознавание речи (STT) и локальный сервер") {
                 PaperSettingRow(
                     "Токен gapi.uz",
-                    caption: "Отправляет голос на console.gapi.uz (особенно хорошо для узбекской речи). Хранится в Keychain.",
+                    caption: "Облачный STT-сервис (особенно хорош для узбекской и смешанной речи). Хранится в Keychain.",
                     systemImage: "key",
                     tileTint: PaperTokens.dictionaryTeal
                 ) {
@@ -485,15 +485,35 @@ struct DashboardSettingsView: View {
                         helpPopoverButton(
                             isPresented: $showGapiKeyHelp,
                             title: "Где взять токен gapi.uz",
-                            message: "Войдите в личный кабинет console.gapi.uz, откройте вкладку «API-токены» и создайте новый токен.",
+                            message: "Войдите в личный кабинет console.gapi.uz, откройте вкладку «API-токены» и создайте новый токен. Сервис специализируется на распознавании речи (STT).",
                             primaryLinkTitle: "Открыть console.gapi.uz",
                             primaryURL: URL(string: "https://console.gapi.uz")!
                         )
                     }
                 }
+
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Локальный сервер встреч (Whisper URL)",
+                    caption: "Необязательно. URL вашего локального Whisper для длинных встреч; без него используется цепочка облачных сервисов.",
+                    systemImage: "server.rack",
+                    tileTint: PaperTokens.meetingsIndigo
+                ) {
+                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                        TextField("http://... или https://...", text: $settings.whisperServerURL)
+                            .textFieldStyle(.plain)
+                            .font(fonts.ui)
+                    }
+                    .frame(width: 240)
+                }
             }
 
-            PaperSettingGroup("Обработка текста (LLM)") {
+            dictationRouteGroup
+
+            meetingsRouteGroup
+
+            PaperSettingGroup("Обработка текста и рекапов (LLM)") {
                 PaperSettingRow(
                     "Сервис обработки",
                     caption: settings.activeLLMConfig.privacyCaption,
@@ -719,6 +739,182 @@ struct DashboardSettingsView: View {
         }
     }
 
+    private var dictationRouteGroup: some View {
+        PaperSettingGroup("Очередность распознавания для диктовки") {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Короткие диктовки идут сверху вниз по включённым источникам. При сбое #1 сработает #2 и далее.")
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            hairlineDivider
+
+            ForEach(Array(settings.sttDictationRoute.enumerated()), id: \.element.id) { index, step in
+                if index > 0 {
+                    hairlineDivider
+                }
+                STTRouteStepRow(
+                    index: index,
+                    totalCount: settings.sttDictationRoute.count,
+                    title: step.source.title,
+                    subtitle: step.source.subtitle,
+                    missingHint: settings.dictationMissingRequirement(step.source),
+                    isEnabled: Binding(
+                        get: { settings.sttDictationRoute[index].isEnabled },
+                        set: { settings.sttDictationRoute[index].isEnabled = $0 }
+                    ),
+                    onMoveUp: {
+                        guard index > 0 else { return }
+                        settings.sttDictationRoute.swapAt(index, index - 1)
+                    },
+                    onMoveDown: {
+                        guard index + 1 < settings.sttDictationRoute.count else { return }
+                        settings.sttDictationRoute.swapAt(index, index + 1)
+                    }
+                ) {
+                    dictationSourceSetupPopover(for: step.source)
+                }
+            }
+
+            hairlineDivider
+
+            Text("Anthropic Claude здесь не участвует: Messages API не принимает аудиофайлы и используется только для обработки текста и рекапов.")
+                .font(fonts.micro)
+                .foregroundStyle(paperTheme.tertiaryInkColor)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+        }
+    }
+
+    private var meetingsRouteGroup: some View {
+        PaperSettingGroup("Очередность распознавания для встреч") {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Отдельная очередь для длинных встреч. Gemini и OpenAI распознают каналы «Вы» и «Собеседники» раздельно.")
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            hairlineDivider
+
+            ForEach(Array(settings.sttMeetingRoute.enumerated()), id: \.element.id) { index, step in
+                if index > 0 {
+                    hairlineDivider
+                }
+                STTRouteStepRow(
+                    index: index,
+                    totalCount: settings.sttMeetingRoute.count,
+                    title: step.source.title,
+                    subtitle: step.source.subtitle,
+                    missingHint: settings.meetingMissingRequirement(step.source),
+                    isEnabled: Binding(
+                        get: { settings.sttMeetingRoute[index].isEnabled },
+                        set: { settings.sttMeetingRoute[index].isEnabled = $0 }
+                    ),
+                    onMoveUp: {
+                        guard index > 0 else { return }
+                        settings.sttMeetingRoute.swapAt(index, index - 1)
+                    },
+                    onMoveDown: {
+                        guard index + 1 < settings.sttMeetingRoute.count else { return }
+                        settings.sttMeetingRoute.swapAt(index, index + 1)
+                    }
+                ) {
+                    meetingSourceSetupPopover(for: step.source)
+                }
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Ждать локальный сервер в очереди",
+                caption: "Если локальный Whisper выбран и временно оффлайн — ждать его в очереди (или перейти к #2 сразу при выключенном тумблере).",
+                systemImage: "clock.arrow.circlepath",
+                tileTint: PaperTokens.meetingsIndigo
+            ) {
+                Toggle("", isOn: $settings.waitForLocalMeetingServerInQueue)
+                    .labelsHidden()
+                    .toggleStyle(PaperToggleStyle())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dictationSourceSetupPopover(for source: STTDictationSource) -> some View {
+        switch source {
+        case .localGateway:
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Домашний шлюз (ПК / Tailscale)")
+                    .font(fonts.uiMedium)
+                    .foregroundStyle(paperTheme.inkColor)
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                    TextField(HomeServerConfig.defaultURLString, text: $settings.homeServerURL)
+                        .textFieldStyle(.plain)
+                        .font(fonts.ui)
+                }
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                    SecureField("Bearer-токен шлюза", text: $settings.homeServerToken)
+                        .textFieldStyle(.plain)
+                        .font(fonts.ui)
+                }
+            }
+            .frame(width: 280)
+        case .gapi:
+            quickKeyPopover(title: "Токен gapi.uz", placeholder: "Вставьте API-токен", text: $settings.gapiToken, portalURL: URL(string: "https://console.gapi.uz")!)
+        case .gemini:
+            quickKeyPopover(title: "Google Gemini API-ключ", placeholder: "AIza...", text: $settings.geminiApiKey, portalURL: LLMProviderKind.gemini.keyPortalURL)
+        case .openai:
+            quickKeyPopover(title: "OpenAI API-ключ", placeholder: "sk-...", text: $settings.openaiApiKey, portalURL: LLMProviderKind.openai.keyPortalURL)
+        }
+    }
+
+    @ViewBuilder
+    private func meetingSourceSetupPopover(for source: STTMeetingSource) -> some View {
+        switch source {
+        case .localWhisper:
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Локальный сервер Whisper")
+                    .font(fonts.uiMedium)
+                    .foregroundStyle(paperTheme.inkColor)
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                    TextField("http://... или https://...", text: $settings.whisperServerURL)
+                        .textFieldStyle(.plain)
+                        .font(fonts.ui)
+                }
+            }
+            .frame(width: 280)
+        case .gapi:
+            quickKeyPopover(title: "Токен gapi.uz", placeholder: "Вставьте API-токен", text: $settings.gapiToken, portalURL: URL(string: "https://console.gapi.uz")!)
+        case .gemini:
+            quickKeyPopover(title: "Google Gemini API-ключ", placeholder: "AIza...", text: $settings.geminiApiKey, portalURL: LLMProviderKind.gemini.keyPortalURL)
+        case .openai:
+            quickKeyPopover(title: "OpenAI API-ключ", placeholder: "sk-...", text: $settings.openaiApiKey, portalURL: LLMProviderKind.openai.keyPortalURL)
+        }
+    }
+
+    private func quickKeyPopover(title: String, placeholder: String, text: Binding<String>, portalURL: URL) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(fonts.uiMedium)
+                .foregroundStyle(paperTheme.inkColor)
+            PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                SecureField(placeholder, text: text)
+                    .textFieldStyle(.plain)
+                    .font(fonts.ui)
+            }
+            Button("Получить ключ") {
+                NSWorkspace.shared.open(portalURL)
+            }
+            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+        }
+        .frame(width: 280)
+    }
+
     private var currentLLMAPIKeyBinding: Binding<String> {
         switch settings.llmProvider {
         case .anthropic: return $settings.anthropicApiKey
@@ -929,22 +1125,6 @@ struct DashboardSettingsView: View {
                             }
                             .labelsHidden()
                             .frame(width: 220)
-                        }
-
-                        hairlineDivider
-
-                        PaperSettingRow(
-                            "Сервер распознавания встреч",
-                            caption: "URL внешнего сервера Whisper; если пусто — используется облако gapi.uz.",
-                            systemImage: "server.rack",
-                            tileTint: PaperTokens.meetingsIndigo
-                        ) {
-                            PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
-                                TextField("https://... или http://...", text: $settings.whisperServerURL)
-                                    .textFieldStyle(.plain)
-                                    .font(fonts.ui)
-                            }
-                            .frame(width: 240)
                         }
 
                         hairlineDivider
@@ -1315,5 +1495,101 @@ struct DashboardSettingsView: View {
         if panel.runModal() == .OK, let url = panel.url {
             settings.exportDestination = url.path
         }
+    }
+}
+
+private struct STTRouteStepRow<SetupContent: View>: View {
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
+    @State private var showSetupPopover = false
+
+    let index: Int
+    let totalCount: Int
+    let title: String
+    let subtitle: String
+    let missingHint: String?
+    @Binding var isEnabled: Bool
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+    @ViewBuilder let setupContent: () -> SetupContent
+
+    var body: some View {
+        let fonts = PaperFonts(preset: fontPreset)
+        let isReady = missingHint == nil
+
+        HStack(alignment: .center, spacing: 12) {
+            Text("\(index + 1)")
+                .font(fonts.captionMedium.monospacedDigit())
+                .foregroundStyle(isEnabled && isReady ? paperTheme.inkColor : paperTheme.tertiaryInkColor)
+                .frame(width: 22, height: 22)
+                .background(
+                    Circle()
+                        .fill(paperTheme.insetColor)
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(fonts.uiMedium)
+                        .foregroundStyle(isEnabled ? paperTheme.inkColor : paperTheme.secondaryInkColor)
+
+                    if isReady {
+                        Text("Готов")
+                            .font(fonts.microMedium)
+                            .foregroundStyle(paperTheme.successColor)
+                    } else if let missingHint {
+                        Button(missingHint) {
+                            showSetupPopover.toggle()
+                        }
+                        .buttonStyle(.plain)
+                        .font(fonts.microMedium)
+                        .foregroundStyle(paperTheme.clipboardWarningColor)
+                        .popover(isPresented: $showSetupPopover, arrowEdge: .bottom) {
+                            setupContent()
+                                .padding(14)
+                                .background(paperTheme.baseColor)
+                        }
+                    }
+                }
+
+                Text(subtitle)
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 4) {
+                Button(action: onMoveUp) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                .disabled(index == 0)
+                .help("Поднять выше в приоритете")
+
+                Button(action: onMoveDown) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                .disabled(index + 1 >= totalCount)
+                .help("Опустить ниже в приоритете")
+
+                Toggle("", isOn: $isEnabled)
+                    .labelsHidden()
+                    .toggleStyle(PaperToggleStyle())
+                    .padding(.leading, 4)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 }

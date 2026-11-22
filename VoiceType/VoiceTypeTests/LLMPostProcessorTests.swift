@@ -196,4 +196,82 @@ final class LLMPostProcessorTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Пиши без эмодзи"))
         XCTAssertTrue(prompt.contains("Cursor"))
     }
+
+    func testCloudAudioSTTChunkParsingAndMultiStepRouting() async throws {
+        let slice = WhisperWindowsClient.SpeechSlice(
+            startFrame: 0,
+            endFrame: 160000,
+            startSeconds: 120.0,
+            durationSeconds: 10.0
+        )
+
+        let gemRaw = """
+        ```json
+        [
+          {"start": 0.5, "end": 3.0, "text": "Привет, коллеги."},
+          {"start": 3.5, "end": 6.0, "text": "Начинаем созвон."}
+        ]
+        ```
+        """
+        let gemSegments = GeminiAudioSTTProvider.parseMeetingChunkResponse(gemRaw, slice: slice, speaker: 2)
+        XCTAssertEqual(gemSegments.count, 2)
+        XCTAssertEqual(gemSegments[0].speaker, 2)
+        XCTAssertEqual(gemSegments[0].start ?? -1, 120.5, accuracy: 0.01)
+        XCTAssertEqual(gemSegments[0].end ?? -1, 123.0, accuracy: 0.01)
+        XCTAssertEqual(gemSegments[1].text, "Начинаем созвон.")
+
+        let openAI = OpenAIAudioSTTProvider(apiKey: "sk-test", model: "whisper-1")
+        let req = try openAI.buildTranscriptionRequest(
+            audioData: Data("WAV".utf8),
+            filename: "slice.wav",
+            mimeType: "audio/wav",
+            prompt: "Korzinka",
+            includeSegmentTimestamps: true,
+            timeout: 30
+        )
+        XCTAssertEqual(req.url?.absoluteString, "https://api.openai.com/v1/audio/transcriptions")
+        XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer sk-test")
+
+        let oaiJSON = Data("""
+        {"text":"Ок","language":"ru","segments":[{"text":"Ок","start":1.0,"end":2.5,"avg_logprob":-0.2,"no_speech_prob":0.1}]}
+        """.utf8)
+        let verbose = try JSONDecoder().decode(WhisperWindowsClient.VerboseResponse.self, from: oaiJSON)
+        let oaiSegments = OpenAIAudioSTTProvider.extractSegments(from: verbose, slice: slice, speaker: 1)
+        XCTAssertEqual(oaiSegments.count, 1)
+        XCTAssertEqual(oaiSegments[0].speaker, 1)
+        XCTAssertEqual(oaiSegments[0].start ?? -1, 121.0, accuracy: 0.01)
+
+        // Multi-step coordinator fallback across 3 steps
+        struct StubSTTProvider: TranscriptionProvider {
+            let providerName: String
+            let outcome: Result<TranscriptionResult, Error>
+            func transcribe(fileURL: URL) async throws -> TranscriptionResult {
+                try outcome.get()
+            }
+        }
+        let coordinator = DictationTranscriptionCoordinator(providers: [
+            StubSTTProvider(providerName: "local", outcome: .failure(HomeServerError.connectTimeout)),
+            StubSTTProvider(providerName: "gapi", outcome: .failure(LLMError.httpError(statusCode: 503, message: "busy"))),
+            StubSTTProvider(providerName: "gemini", outcome: .success(TranscriptionResult(text: "Готово", engine: "gemini", latencyMs: 120)))
+        ])
+        let dummyURL = URL(fileURLWithPath: "/tmp/dummy.wav")
+        let routed = try await coordinator.transcribe(fileURL: dummyURL)
+        XCTAssertEqual(routed.text, "Готово")
+        XCTAssertEqual(routed.engine, "gemini")
+        XCTAssertEqual(routed.fallbackFrom, "local")
+
+        // Separate dictation and meeting route persistence in SettingsStore
+        let suiteName = "com.farrukh.voicetype.tests.stt.routes.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = SettingsStore(defaults: defaults, persistSecrets: false, syncDockIcon: false)
+        store.sttDictationRoute.swapAt(1, 2) // Put Gemini ahead of gapi only for dictation
+        XCTAssertEqual(store.sttDictationRoute[1].source, .gemini)
+        XCTAssertEqual(store.sttMeetingRoute[1].source, .gapi)
+
+        let reloaded = SettingsStore(defaults: defaults, persistSecrets: false, syncDockIcon: false)
+        XCTAssertEqual(reloaded.sttDictationRoute[1].source, .gemini)
+        XCTAssertEqual(reloaded.sttMeetingRoute[1].source, .gapi)
+    }
 }

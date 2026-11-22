@@ -39,6 +39,8 @@ targets:
       - path: VoiceTypeTests
       - path: VoiceType/Sources/AudioCompressor.swift
       - path: VoiceType/Sources/TranscriptionProvider.swift
+      - path: VoiceType/Sources/WhisperWindowsClient.swift
+      - path: VoiceType/Sources/CloudAudioSTTProviders.swift
       - path: VoiceType/Sources/HomeServerProvider.swift
       - path: VoiceType/Sources/HistoryStore.swift
       - path: VoiceType/Sources/GapiClient.swift

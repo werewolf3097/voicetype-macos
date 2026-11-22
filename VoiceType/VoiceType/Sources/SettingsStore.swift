@@ -1,6 +1,108 @@
 import Foundation
 import CoreGraphics
 
+enum STTDictationSource: String, CaseIterable, Identifiable, Codable, Sendable {
+    case localGateway = "localGateway"
+    case gapi = "gapi"
+    case gemini = "gemini"
+    case openai = "openai"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .localGateway: return "Домашний шлюз (ПК / Tailscale)"
+        case .gapi: return "gapi.uz"
+        case .gemini: return "Google Gemini"
+        case .openai: return "OpenAI (Whisper)"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .localGateway: return "Сжатый Opus-поток на ваш локальный сервер Parakeet / Whisper."
+        case .gapi: return "Облачный STT-сервис — особенно хорош для узбекской и смешанной речи."
+        case .gemini: return "Мультимодальное распознавание аудио через Gemini API."
+        case .openai: return "OpenAI /v1/audio/transcriptions (whisper-1)."
+        }
+    }
+
+    static var defaultOrder: [STTRouteStep<STTDictationSource>] {
+        [
+            .init(source: .localGateway, isEnabled: false),
+            .init(source: .gapi, isEnabled: true),
+            .init(source: .gemini, isEnabled: true),
+            .init(source: .openai, isEnabled: true)
+        ]
+    }
+}
+
+enum STTMeetingSource: String, CaseIterable, Identifiable, Codable, Sendable {
+    case localWhisper = "localWhisper"
+    case gapi = "gapi"
+    case gemini = "gemini"
+    case openai = "openai"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .localWhisper: return "Локальный сервер встреч (Whisper)"
+        case .gapi: return "gapi.uz"
+        case .gemini: return "Google Gemini (раздельно каналы)"
+        case .openai: return "OpenAI (нарезка чанками <25 МБ)"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .localWhisper: return "Локальный Whisper"
+        case .gapi: return "gapi.uz"
+        case .gemini: return "Gemini"
+        case .openai: return "OpenAI"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .localWhisper: return "Ваш сервер Whisper (локальный GPU, без лимитов и платы за минуты)."
+        case .gapi: return "Облачный STT — особенно хорош для узбекской речи (+ опция резюме)."
+        case .gemini: return "Слушает «Вы» и «Собеседников» раздельно (до 9.5 ч, без потери каналов)."
+        case .openai: return "Режет встречу на чанки <25 МБ (whisper-1) с привязкой спикеров."
+        }
+    }
+
+    static var defaultOrder: [STTRouteStep<STTMeetingSource>] {
+        [
+            .init(source: .localWhisper, isEnabled: true),
+            .init(source: .gapi, isEnabled: true),
+            .init(source: .gemini, isEnabled: true),
+            .init(source: .openai, isEnabled: true)
+        ]
+    }
+}
+
+struct STTRouteStep<Source: RawRepresentable & Hashable & Codable & Sendable>: Identifiable, Codable, Equatable, Sendable where Source.RawValue == String {
+    let source: Source
+    var isEnabled: Bool
+
+    var id: String { source.rawValue }
+
+    static func normalized(_ stored: [STTRouteStep<Source>], defaults: [STTRouteStep<Source>]) -> [STTRouteStep<Source>] {
+        var seen = Set<Source>()
+        var result: [STTRouteStep<Source>] = []
+        for item in stored {
+            if seen.insert(item.source).inserted {
+                result.append(item)
+            }
+        }
+        for item in defaults where seen.insert(item.source).inserted {
+            result.append(item)
+        }
+        return result
+    }
+}
+
 enum CleanupStyle: String, CaseIterable, Identifiable, Codable, Sendable {
     case off = "Без обработки"
     case friendly = "Дружественный"
@@ -365,8 +467,42 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(exportDestination, forKey: "exportDestination") }
     }
     @Published var useHomeServer: Bool {
-        didSet { defaults.set(useHomeServer, forKey: "useHomeServer") }
+        didSet {
+            defaults.set(useHomeServer, forKey: "useHomeServer")
+            guard !isSyncingRouteFlag else { return }
+            isSyncingRouteFlag = true
+            if let idx = sttDictationRoute.firstIndex(where: { $0.source == .localGateway }),
+               sttDictationRoute[idx].isEnabled != useHomeServer {
+                sttDictationRoute[idx].isEnabled = useHomeServer
+            }
+            isSyncingRouteFlag = false
+        }
     }
+    @Published var sttDictationRoute: [STTRouteStep<STTDictationSource>] {
+        didSet {
+            if let data = try? JSONEncoder().encode(sttDictationRoute) {
+                defaults.set(data, forKey: "sttDictationRoute")
+            }
+            guard !isSyncingRouteFlag else { return }
+            if let localStep = sttDictationRoute.first(where: { $0.source == .localGateway }),
+               useHomeServer != localStep.isEnabled {
+                isSyncingRouteFlag = true
+                useHomeServer = localStep.isEnabled
+                isSyncingRouteFlag = false
+            }
+        }
+    }
+    @Published var sttMeetingRoute: [STTRouteStep<STTMeetingSource>] {
+        didSet {
+            if let data = try? JSONEncoder().encode(sttMeetingRoute) {
+                defaults.set(data, forKey: "sttMeetingRoute")
+            }
+        }
+    }
+    @Published var waitForLocalMeetingServerInQueue: Bool {
+        didSet { defaults.set(waitForLocalMeetingServerInQueue, forKey: "waitForLocalMeetingServerInQueue") }
+    }
+    private var isSyncingRouteFlag = false
     @Published var homeServerURL: String {
         didSet { defaults.set(homeServerURL, forKey: "homeServerURL") }
     }
@@ -503,6 +639,53 @@ final class SettingsStore: ObservableObject {
         )
     }
 
+    func isDictationSourceConfigured(_ source: STTDictationSource) -> Bool {
+        switch source {
+        case .localGateway:
+            return !homeServerURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !homeServerToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .gapi:
+            return !gapiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .gemini:
+            return !geminiApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .openai:
+            return !openaiApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    func dictationMissingRequirement(_ source: STTDictationSource) -> String? {
+        guard !isDictationSourceConfigured(source) else { return nil }
+        switch source {
+        case .localGateway: return "Укажите URL и токен домашнего шлюза"
+        case .gapi: return "Укажите токен gapi.uz"
+        case .gemini: return "Укажите API-ключ Gemini"
+        case .openai: return "Укажите API-ключ OpenAI"
+        }
+    }
+
+    func isMeetingSourceConfigured(_ source: STTMeetingSource) -> Bool {
+        switch source {
+        case .localWhisper:
+            return hasExternalWhisperServer
+        case .gapi:
+            return !gapiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .gemini:
+            return !geminiApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .openai:
+            return !openaiApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    func meetingMissingRequirement(_ source: STTMeetingSource) -> String? {
+        guard !isMeetingSourceConfigured(source) else { return nil }
+        switch source {
+        case .localWhisper: return "Укажите URL сервера Whisper"
+        case .gapi: return "Укажите токен gapi.uz"
+        case .gemini: return "Укажите API-ключ Gemini"
+        case .openai: return "Укажите API-ключ OpenAI"
+        }
+    }
+
     init(
         defaults: UserDefaults = .standard,
         persistSecrets: Bool = true,
@@ -612,7 +795,31 @@ final class SettingsStore: ObservableObject {
         self.exportDestination = defaults.string(forKey: "exportDestination")
             ?? defaults.string(forKey: "obsidianRecapsFolder")
             ?? ""
-        self.useHomeServer = defaults.object(forKey: "useHomeServer") as? Bool ?? false
+        let legacyUseHome = defaults.object(forKey: "useHomeServer") as? Bool ?? false
+        self.useHomeServer = legacyUseHome
+        if let rawDictRoute = defaults.data(forKey: "sttDictationRoute"),
+           let decoded = try? JSONDecoder().decode([STTRouteStep<STTDictationSource>].self, from: rawDictRoute) {
+            var normalized = STTRouteStep.normalized(decoded, defaults: STTDictationSource.defaultOrder)
+            if defaults.object(forKey: "useHomeServer") != nil,
+               let idx = normalized.firstIndex(where: { $0.source == .localGateway }) {
+                normalized[idx].isEnabled = legacyUseHome
+            }
+            self.sttDictationRoute = normalized
+        } else {
+            var initial = STTDictationSource.defaultOrder
+            if let idx = initial.firstIndex(where: { $0.source == .localGateway }) {
+                initial[idx].isEnabled = legacyUseHome
+            }
+            self.sttDictationRoute = initial
+        }
+
+        if let rawMeetRoute = defaults.data(forKey: "sttMeetingRoute"),
+           let decoded = try? JSONDecoder().decode([STTRouteStep<STTMeetingSource>].self, from: rawMeetRoute) {
+            self.sttMeetingRoute = STTRouteStep.normalized(decoded, defaults: STTMeetingSource.defaultOrder)
+        } else {
+            self.sttMeetingRoute = STTMeetingSource.defaultOrder
+        }
+        self.waitForLocalMeetingServerInQueue = defaults.object(forKey: "waitForLocalMeetingServerInQueue") as? Bool ?? true
         self.homeServerURL = defaults.string(forKey: "homeServerURL") ?? HomeServerConfig.defaultURLString
         self.homeServerEngine = HomeServerEngine(rawValue: defaults.string(forKey: "homeServerEngine") ?? "") ?? .auto
         self.homeServerLanguage = HomeServerLanguage(rawValue: defaults.string(forKey: "homeServerLanguage") ?? "") ?? .auto

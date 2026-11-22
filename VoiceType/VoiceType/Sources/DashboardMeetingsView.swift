@@ -995,7 +995,7 @@ struct DashboardMeetingsView: View {
                             .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                         }
 
-                        Button("Повторить (gapi.uz)") {
+                        Button("Повторить (\(appState.nextCloudMeetingProviderTitle))") {
                             appState.transcribeMeetingUrgentGapi(meeting.id)
                         }
                         .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
@@ -1029,7 +1029,7 @@ struct DashboardMeetingsView: View {
                 .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
             }
 
-            Button("Отправить через gapi.uz") {
+            Button("Отправить через \(appState.nextCloudMeetingProviderTitle)") {
                 appState.transcribeMeetingUrgentGapi(meeting.id)
             }
             .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
@@ -1039,6 +1039,7 @@ struct DashboardMeetingsView: View {
     private func transcribingStatusBanner(for meeting: MeetingRecord) -> some View {
         let engineName = meeting.transcriptionEngine ?? "Сервер распознавания"
         let isGapi = engineName == "gapi.uz"
+        let isLocal = engineName.contains("Whisper (") || engineName == "Внешний сервер"
         let progress = resolvedTranscriptionProgress(for: meeting, isGapi: isGapi)
         let percent = Int((progress.overallFraction * 100).rounded())
 
@@ -1055,8 +1056,8 @@ struct DashboardMeetingsView: View {
                         .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(theme.secondaryInk)
                         .fixedSize()
-                    if !isGapi, meetingsStore.audioFileURL(for: meeting) != nil {
-                        Button("Переключить на gapi.uz") {
+                    if isLocal, meetingsStore.audioFileURL(for: meeting) != nil {
+                        Button("Переключить на \(appState.nextCloudMeetingProviderTitle)") {
                             appState.transcribeMeetingUrgentGapi(meeting.id)
                         }
                         .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
@@ -1075,8 +1076,8 @@ struct DashboardMeetingsView: View {
                             .font(.callout.weight(.semibold).monospacedDigit())
                             .foregroundStyle(theme.secondaryInk)
                     }
-                    if !isGapi, meetingsStore.audioFileURL(for: meeting) != nil {
-                        Button("Переключить на gapi.uz") {
+                    if isLocal, meetingsStore.audioFileURL(for: meeting) != nil {
+                        Button("Переключить на \(appState.nextCloudMeetingProviderTitle)") {
                             appState.transcribeMeetingUrgentGapi(meeting.id)
                         }
                         .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
