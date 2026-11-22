@@ -64,7 +64,7 @@ struct TranscriptionRecord: Identifiable, Codable, Equatable {
         self.targetApp = try container.decodeIfPresent(String.self, forKey: .targetApp)
         self.errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
         if let rawStyle = try container.decodeIfPresent(String.self, forKey: .style) {
-            self.style = CleanupStyle(rawValue: rawStyle)
+            self.style = CleanupStyle.fromStored(rawStyle)
         } else {
             self.style = nil
         }

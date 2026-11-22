@@ -154,4 +154,46 @@ final class LLMPostProcessorTests: XCTestCase {
         let oaiJSON = Data(#"{"data":[{"id":"gpt-4o-mini"},{"id":"gpt-5-mini"},{"id":"whisper-1"},{"id":"gpt-4o-realtime"}]}"#.utf8)
         XCTAssertEqual(try openai.parseAvailableModels(data: oaiJSON), ["gpt-5-mini", "gpt-4o-mini"])
     }
+
+    func testCleanupStyleLegacyMigrationAndAutoToneModifiers() {
+        XCTAssertEqual(CleanupStyle.fromStored("Умная коррекция (Typeless)"), .friendly)
+        XCTAssertEqual(CleanupStyle.fromStored("Заметка"), .business)
+        XCTAssertEqual(CleanupStyle.fromStored("Сообщение/письмо"), .business)
+        XCTAssertEqual(CleanupStyle.fromStored("Без LLM-обработки"), .off)
+
+        var modifiers = CleanupModifiers(
+            compactMode: true,
+            structuredLists: true,
+            preserveTechnicalTerms: true,
+            autoToneByApp: true,
+            customInstruction: "Пиши без эмодзи"
+        )
+        XCTAssertEqual(modifiers.resolvedStyle(base: .formal, targetAppName: "Telegram"), .friendly)
+        XCTAssertEqual(modifiers.resolvedStyle(base: .friendly, targetAppName: "Mail"), .business)
+        XCTAssertEqual(modifiers.resolvedStyle(base: .formal, targetAppName: "Safari"), .formal)
+        XCTAssertEqual(modifiers.resolvedStyle(base: .off, targetAppName: "Telegram"), .off)
+
+        modifiers.autoToneByApp = false
+        XCTAssertEqual(modifiers.resolvedStyle(base: .formal, targetAppName: "Telegram"), .formal)
+
+        let prompt = ClaudeClient.buildSystemPrompt(
+            base: CleanupStyle.business.systemPrompt ?? "",
+            transcription: GapiTranscription(
+                text: "привет",
+                languageCode: "ru",
+                languageConfidence: nil,
+                languageShare: nil,
+                segments: []
+            ),
+            uzbekStyle: .tashkent,
+            modifiers: modifiers,
+            targetAppName: "Cursor"
+        )
+        XCTAssertTrue(prompt.contains("знаки препинания"))
+        XCTAssertTrue(prompt.contains("Без воды"))
+        XCTAssertTrue(prompt.contains("Списки и абзацы"))
+        XCTAssertTrue(prompt.contains("Код и термины"))
+        XCTAssertTrue(prompt.contains("Пиши без эмодзи"))
+        XCTAssertTrue(prompt.contains("Cursor"))
+    }
 }

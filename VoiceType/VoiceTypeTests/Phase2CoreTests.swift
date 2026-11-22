@@ -159,7 +159,7 @@ final class Phase2CoreTests: XCTestCase {
             status: .failed,
             targetApp: "Telegram",
             errorMessage: "Не удалось распознать (тишина)",
-            style: .grammar
+            style: .friendly
         )
 
         let reloaded = HistoryStore(fileURL: fileURL)

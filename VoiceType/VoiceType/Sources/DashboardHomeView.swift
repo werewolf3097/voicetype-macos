@@ -299,13 +299,23 @@ struct DashboardHomeView: View {
         }
     }
 
-    // MARK: - Cleanup Style (4 Capsules)
+    // MARK: - Cleanup Style (4 Capsules + Add-on Chips)
 
     private var cleanupStyleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Обработка текста")
-                .font(fonts.sectionTitle)
-                .foregroundStyle(paperTheme.inkColor)
+            HStack(spacing: 6) {
+                Text("Обработка текста")
+                    .font(fonts.sectionTitle)
+                    .foregroundStyle(paperTheme.inkColor)
+
+                CleanupStyleGuideButton()
+
+                Spacer()
+
+                Text(settings.cleanupStyle.loadLabel)
+                    .font(fonts.microMedium)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -323,7 +333,39 @@ struct DashboardHomeView: View {
                                 isCapsule: true
                             )
                         )
+                        .help(style.tooltipText)
                         .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    }
+                }
+            }
+
+            if settings.cleanupStyle != .off {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        addonChip(
+                            title: "Без воды",
+                            systemImage: "arrow.down.right.and.arrow.up.left",
+                            isOn: $settings.cleanupCompactMode,
+                            help: "Сжимает длинную речь в короткую суть без повторов и вводных слов."
+                        )
+                        addonChip(
+                            title: "Списки",
+                            systemImage: "list.bullet",
+                            isOn: $settings.cleanupStructuredLists,
+                            help: "Оформляет перечисления и шаги в виде буллит-списка и абзацев."
+                        )
+                        addonChip(
+                            title: "Код и термины",
+                            systemImage: "chevron.left.forwardslash.chevron.right",
+                            isOn: $settings.cleanupPreserveTechTerms,
+                            help: "Сохраняет пути, URL, команды и camelCase без искажений и перевода."
+                        )
+                        addonChip(
+                            title: "Авто по приложению",
+                            systemImage: "app.badge.checkmark",
+                            isOn: $settings.cleanupAutoToneByApp,
+                            help: "Telegram/Slack → Дружественный; Mail/Notes/IDE → Деловой; иначе выбранный стиль."
+                        )
                     }
                 }
             }
@@ -332,10 +374,58 @@ struct DashboardHomeView: View {
                 .font(fonts.caption)
                 .foregroundStyle(paperTheme.inkColor)
 
+            if settings.cleanupAutoToneByApp && settings.cleanupStyle != .off {
+                Text("Автотон активен: для чатов (Telegram, Slack) подставится «Дружественный», для почты/заметок/IDE — «Деловой».")
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+            }
+
+            if !settings.cleanupCustomInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && settings.cleanupStyle != .off {
+                Text("Свой акцент: \(settings.cleanupCustomInstruction)")
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+                    .lineLimit(1)
+            }
+
             Text(settings.activeLLMConfig.privacyCaption)
                 .font(fonts.caption)
                 .foregroundStyle(paperTheme.secondaryInkColor)
         }
+    }
+
+    private func addonChip(
+        title: String,
+        systemImage: String,
+        isOn: Binding<Bool>,
+        help: String
+    ) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : systemImage)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(isOn.wrappedValue ? PaperTokens.dictationBlue : paperTheme.secondaryInkColor)
+                Text(title)
+                    .font(fonts.captionMedium)
+                    .foregroundStyle(isOn.wrappedValue ? paperTheme.inkColor : paperTheme.secondaryInkColor)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4.5)
+            .background(
+                RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
+                    .fill(isOn.wrappedValue ? paperTheme.selectedSidebarColor : paperTheme.surfaceColor.opacity(0.65))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
+                    .strokeBorder(
+                        isOn.wrappedValue ? PaperTokens.dictationBlue.opacity(0.45) : paperTheme.borderColor,
+                        lineWidth: PaperTokens.hairline
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 
     // MARK: - Quiet Weekly Stat Line

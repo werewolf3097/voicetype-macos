@@ -713,3 +713,73 @@ extension View {
         modifier(PaperEnvironmentModifier(settings: settings))
     }
 }
+
+// MARK: - Cleanup Style Guide Popover Button
+
+struct CleanupStyleGuideButton: View {
+    @Environment(\.paperTheme) private var theme
+    @Environment(\.paperFontPreset) private var fontPreset
+    @State private var isPresented = false
+
+    var body: some View {
+        let fonts = PaperFonts(preset: fontPreset)
+
+        Button {
+            isPresented.toggle()
+        } label: {
+            Image(systemName: "questionmark")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(theme.secondaryInkColor)
+                .frame(width: 20, height: 20)
+                .paperSurface(level: .l2OnPaper, cornerRadius: 999)
+        }
+        .buttonStyle(.plain)
+        .help("Как работают стили обработки текста")
+        .accessibilityLabel("Памятка по стилям обработки")
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Стили постобработки ИИ")
+                        .font(fonts.uiSemibold)
+                        .foregroundStyle(theme.inkColor)
+                    Text("Во всех ИИ-стилях всегда проверяется пунктуация, исправляется орфография, удаляются слова-паразиты и самоисправления.")
+                        .font(fonts.caption)
+                        .foregroundStyle(theme.secondaryInkColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+                    .overlay(theme.borderColor)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(CleanupStyle.allCases) { style in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Text(style.shortTitle)
+                                    .font(fonts.uiMedium)
+                                    .foregroundStyle(theme.inkColor)
+                                Text("· \(style.loadLabel)")
+                                    .font(fonts.microMedium)
+                                    .foregroundStyle(theme.secondaryInkColor)
+                            }
+                            Text(style.tooltipText)
+                                .font(fonts.caption)
+                                .foregroundStyle(theme.secondaryInkColor)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if style != .off {
+                                Text("Пример: «\(style.exampleOutput)»")
+                                    .font(fonts.micro)
+                                    .italic()
+                                    .foregroundStyle(theme.tertiaryInkColor)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .frame(width: 380, alignment: .leading)
+            .background(theme.baseColor)
+        }
+    }
+}

@@ -76,7 +76,9 @@ struct ClaudeClient {
     static func buildSystemPrompt(
         base: String,
         transcription: GapiTranscription,
-        uzbekStyle: UzbekStyle
+        uzbekStyle: UzbekStyle,
+        modifiers: CleanupModifiers = .default,
+        targetAppName: String? = nil
     ) -> String {
         let hasRussian = transcription.languageCode == "ru"
             || (transcription.languageShare?["ru"] ?? 0) > 0.05
@@ -87,8 +89,29 @@ struct ClaudeClient {
             || transcription.segments.contains { $0.languageCode == "uz" || $0.languageCode == "uz-khorezm" }
 
         var extra: [String] = [
-            "Текст уже в письменной форме: русский записан кириллицей, узбекский — латиницей. Не транслитерируй заново и не переводи. Не сокращай и не выкидывай предложения, имена и названия. Расставь пунктуацию, убери слова-паразиты и самоисправления, поправь очевидный сбой распознавания (пропущенные ь и ы, ш вместо щ, название компании, которое слышно как «эпам»). Аббревиатуры пиши как принято, целиком."
+            "Текст уже в письменной форме: русский записан кириллицей, узбекский — латиницей. Не транслитерируй заново и не переводи без явной инструкции. Не сокращай и не выкидывай факты, имена и названия. Аббревиатуры пиши целиком, как принято."
         ]
+
+        if modifiers.compactMode {
+            extra.append("Надстройка «Без воды»: убери повторы и лишние вводные фразы, передай смысл максимально компактно, сохраняя выбранный тон.")
+        }
+
+        if modifiers.structuredLists {
+            extra.append("Надстройка «Списки и абзацы»: если в речи перечисляются пункты, шаги или задачи, оформи их аккуратным маркированным списком или логичными абзацами.")
+        }
+
+        if modifiers.preserveTechnicalTerms {
+            extra.append("Надстройка «Код и термины»: не переводи и не искажай технические термины, названия сервисов, URL, пути к файлам, CLI-команды и идентификаторы вроде camelCase или snake_case.")
+        }
+
+        let trimmedCustom = modifiers.customInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedCustom.isEmpty {
+            extra.append("Дополнительная инструкция пользователя: \(trimmedCustom)")
+        }
+
+        if let targetAppName, !targetAppName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            extra.append("Контекст: текст будет вставлен в приложение «\(targetAppName)».")
+        }
 
         if let lang = transcription.languageCode {
             let shareInfo: String

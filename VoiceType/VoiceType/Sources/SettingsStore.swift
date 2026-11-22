@@ -2,54 +2,157 @@ import Foundation
 import CoreGraphics
 
 enum CleanupStyle: String, CaseIterable, Identifiable, Codable, Sendable {
-    case off = "Без LLM-обработки"
-    case grammar = "Умная коррекция (Typeless)"
-    case notes = "Заметка"
-    case message = "Сообщение/письмо"
+    case off = "Без обработки"
+    case friendly = "Дружественный"
+    case business = "Деловой"
+    case formal = "Формальный"
 
     var id: String { rawValue }
 
-    var shortTitle: String {
+    var shortTitle: String { rawValue }
+
+    var loadLabel: String {
         switch self {
-        case .off: return "Без обработки"
-        case .grammar: return "Аккуратно"
-        case .notes: return "Заметка"
-        case .message: return "Сообщение"
+        case .off: return "0% правок"
+        case .friendly: return "Лёгкая правка"
+        case .business: return "Средняя правка"
+        case .formal: return "Полная редактура"
+        }
+    }
+
+    var tooltipText: String {
+        switch self {
+        case .off:
+            return "Без ИИ: вставляет сырую расшифровку как есть, без задержки на обработку."
+        case .friendly:
+            return "Лёгкая правка (для Telegram, Slack, личных чатов): расставит знаки, уберёт «э-э» и опечатки, но оставит живую интонацию, «ты» и лёгкий тон без официоза."
+        case .business:
+            return "Средняя правка (для коллег, писем, заметок): вычистит разговорные шероховатости, сделает мысль собранной, нейтральной и понятной, при длинной речи поделит на абзацы."
+        case .formal:
+            return "Полная редактура (для документов, руководства, официальных обращений): переведёт устную речь в грамотный официально-вежливый стиль на «Вы»."
         }
     }
 
     var oneLineDescription: String {
         switch self {
         case .off:
-            return "Без обработки: вставит текст так, как он распознан."
-        case .grammar:
-            return "Аккуратно: расставит знаки и уберёт «э-э», смысл не меняет."
-        case .notes:
-            return "Заметка: очистит оговорки и оформит тезисы или абзацы."
-        case .message:
-            return "Сообщение: приведёт речь к связному тексту для чата или письма."
+            return "Без обработки: вставит текст ровно так, как он распознан."
+        case .friendly:
+            return "Дружественный (лёгкая правка): пунктуация и орфография с живым тоном для чатов и Telegram."
+        case .business:
+            return "Деловой (средняя правка): чёткая рабочая речь для коллег, писем, задач и заметок."
+        case .formal:
+            return "Формальный (полная редактура): строгий официально-вежливый стиль на «Вы»."
+        }
+    }
+
+    var exampleOutput: String {
+        switch self {
+        case .off:
+            return "ну короче я завтра не смогу на созвон давай в четверг ок"
+        case .friendly:
+            return "Я завтра не смогу на созвон, давай в четверг, ок?"
+        case .business:
+            return "Завтра не смогу присоединиться к созвону. Давайте перенесём встречу на четверг."
+        case .formal:
+            return "К сожалению, завтра я не смогу принять участие в созвоне. Предлагаю перенести встречу на четверг."
         }
     }
 
     var systemPrompt: String? {
+        let sharedFoundation = """
+        Обязательная база (выполняй всегда):
+        1. Расставь все недостающие знаки препинания (запятые, тире, двоеточия, точки, вопросительные знаки).
+        2. Исправь орфографические, падежные и очевидные фонетические сбои распознавания речи.
+        3. Убери слова-паразиты («э-э», «эм», «ну», «как бы», «типа», случайные повторы слов) и обработай устные самоисправления («давай завтра нет в четверг» → «давай в четверг»).
+        4. Сохрани язык оригинала (или смешанную речь) и все факты, имена, даты и числа — ничего не выдумывай от себя.
+        Верни только готовый текст, без кавычек и пояснений.
+        """
+
         switch self {
         case .off:
             return nil
-        case .grammar:
+        case .friendly:
             return """
-            Ты — интеллектуальный редактор голосовой диктовки в стиле Typeless.
-            Тебе дают расшифровку живой речи. Твоя задача — выдать идеально отпунктурованный текст, полностью сохранив авторский тон, лексику и смысл:
-            1. Расставь все недостающие запятые, тире, двоеточия, точки и вопросительные знаки по правилам языка.
-            2. Убери слова-паразиты («э-э», «эм», «ну», «как бы», «типа», случайные повторы слов подряд).
-            3. Обработай устные самоисправления: если говорящий поправил сам себя («давай завтра нет в четверг созвонимся» → «давай в четверг созвонимся»), оставь только итоговый вариант.
-            4. Исправь мелкие падежные/фонетические сбои распознавания, но НЕ переписывай фразы в искусственный канцелярит и ничего не придумывай от себя.
-            Верни только готовый текст, без кавычек и пояснений.
+            Ты — редактор голосовой диктовки в стиле Typeless с мягким дружественным тоном (как живая переписка в Telegram, Slack или личном чате).
+            Твоя задача — вычистить речь от ошибок, но сохранить естественный, человеческий голос автора:
+            - Не превращай фразы в сухой канцелярит; сохраняй обращение «ты/вы» и разговорную лёгкость.
+            - В короткой однострочной реплике для чата не утяжеляй тон лишним официозом.
+
+            \(sharedFoundation)
             """
-        case .notes:
-            return "Ты редактор. Тебе дают сырую расшифровку голосовой заметки. Приведи её в читаемый вид: убери слова-паразиты и оговорки, разбей на абзацы или пункты, если это уместно. Сохрани язык и смысл оригинала. Верни только готовый текст, без пояснений и кавычек."
-        case .message:
-            return "Ты редактор. Тебе дают сырую расшифровку голосового сообщения, которое человек хочет отправить как текстовое письмо или чат-сообщение. Приведи его к связному, вежливому тексту сообщения на том же языке, убери слова-паразиты. Не добавляй приветствия и подпись, если их не было. Верни только готовый текст, без пояснений и кавычек."
+        case .business:
+            return """
+            Ты — редактор голосовой диктовки в нейтрально-деловом рабочем стиле (переписка с коллегами и клиентами, рабочие письма, заметки и задачи).
+            Твоя задача — сделать мысль чёткой, собранной и уважительной:
+            - Сгладь слишком резкие или сумбурные разговорные обороты, не скатываясь в тяжёлый бюрократический язык.
+            - Если текст длинный, логично разбей его на аккуратные абзацы.
+
+            \(sharedFoundation)
+            """
+        case .formal:
+            return """
+            Ты — редактор голосовой диктовки в строгом формальном стиле (официальные письма, обращения к руководству/партнёрам, документы).
+            Твоя задача — перевести устную речь в безупречный официально-вежливый письменный регистр:
+            - Используй грамотные завершённые формулировки и вежливое обращение на «Вы» (если уместно по контексту).
+            - Полностью убери просторечия и сленг, сохранив весь смысл, имена и цифры.
+
+            \(sharedFoundation)
+            """
         }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        self = Self.fromStored(raw) ?? .friendly
+    }
+
+    static func fromStored(_ raw: String?) -> CleanupStyle? {
+        guard let raw else { return nil }
+        if let direct = CleanupStyle(rawValue: raw) {
+            return direct
+        }
+        switch raw {
+        case "Без LLM-обработки":
+            return .off
+        case "Умная коррекция (Typeless)":
+            return .friendly
+        case "Заметка", "Сообщение/письмо":
+            return .business
+        default:
+            return nil
+        }
+    }
+}
+
+struct CleanupModifiers: Equatable, Sendable {
+    var compactMode: Bool = false
+    var structuredLists: Bool = false
+    var preserveTechnicalTerms: Bool = true
+    var autoToneByApp: Bool = false
+    var customInstruction: String = ""
+
+    static let `default` = CleanupModifiers()
+
+    func resolvedStyle(base: CleanupStyle, targetAppName: String?) -> CleanupStyle {
+        guard base != .off else { return .off }
+        guard autoToneByApp, let app = targetAppName?.lowercased(), !app.isEmpty else {
+            return base
+        }
+        let friendlyApps = ["telegram", "whatsapp", "slack", "messages", "сообщения", "discord"]
+        if friendlyApps.contains(where: { app.contains($0) }) {
+            return .friendly
+        }
+        let businessApps = [
+            "mail", "почта", "outlook", "spark", "mimestream",
+            "notion", "obsidian", "notes", "заметки", "linear", "jira",
+            "cursor", "visual studio code", "vscode", "xcode", "terminal", "iterm"
+        ]
+        if businessApps.contains(where: { app.contains($0) }) {
+            return .business
+        }
+        return base
     }
 }
 
@@ -152,6 +255,31 @@ final class SettingsStore: ObservableObject {
     }
     @Published var cleanupStyle: CleanupStyle {
         didSet { defaults.set(cleanupStyle.rawValue, forKey: "cleanupStyle") }
+    }
+    @Published var cleanupCompactMode: Bool {
+        didSet { defaults.set(cleanupCompactMode, forKey: "cleanupCompactMode") }
+    }
+    @Published var cleanupStructuredLists: Bool {
+        didSet { defaults.set(cleanupStructuredLists, forKey: "cleanupStructuredLists") }
+    }
+    @Published var cleanupPreserveTechTerms: Bool {
+        didSet { defaults.set(cleanupPreserveTechTerms, forKey: "cleanupPreserveTechTerms") }
+    }
+    @Published var cleanupAutoToneByApp: Bool {
+        didSet { defaults.set(cleanupAutoToneByApp, forKey: "cleanupAutoToneByApp") }
+    }
+    @Published var cleanupCustomInstruction: String {
+        didSet { defaults.set(cleanupCustomInstruction, forKey: "cleanupCustomInstruction") }
+    }
+
+    var cleanupModifiers: CleanupModifiers {
+        CleanupModifiers(
+            compactMode: cleanupCompactMode,
+            structuredLists: cleanupStructuredLists,
+            preserveTechnicalTerms: cleanupPreserveTechTerms,
+            autoToneByApp: cleanupAutoToneByApp,
+            customInstruction: cleanupCustomInstruction
+        )
     }
     @Published var llmProvider: LLMProviderKind {
         didSet { defaults.set(llmProvider.rawValue, forKey: "llmProvider") }
@@ -425,7 +553,17 @@ final class SettingsStore: ObservableObject {
         }
 
         self.restoreClipboard = defaults.object(forKey: "restoreClipboard") as? Bool ?? true
-        self.cleanupStyle = CleanupStyle(rawValue: defaults.string(forKey: "cleanupStyle") ?? "") ?? .grammar
+        let rawCleanupStyle = defaults.string(forKey: "cleanupStyle")
+        let resolvedStyle = CleanupStyle.fromStored(rawCleanupStyle) ?? .friendly
+        self.cleanupStyle = resolvedStyle
+        if rawCleanupStyle != resolvedStyle.rawValue {
+            defaults.set(resolvedStyle.rawValue, forKey: "cleanupStyle")
+        }
+        self.cleanupCompactMode = defaults.object(forKey: "cleanupCompactMode") as? Bool ?? false
+        self.cleanupStructuredLists = defaults.object(forKey: "cleanupStructuredLists") as? Bool ?? false
+        self.cleanupPreserveTechTerms = defaults.object(forKey: "cleanupPreserveTechTerms") as? Bool ?? true
+        self.cleanupAutoToneByApp = defaults.object(forKey: "cleanupAutoToneByApp") as? Bool ?? false
+        self.cleanupCustomInstruction = defaults.string(forKey: "cleanupCustomInstruction") ?? ""
         self.llmProvider = LLMProviderKind(rawValue: defaults.string(forKey: "llmProvider") ?? "") ?? .anthropic
         let storedAnthropicModel = defaults.string(forKey: "anthropicModel") ?? ""
         self.anthropicModel = (storedAnthropicModel == "claude-haiku-4-5-20251001" || storedAnthropicModel == LLMProviderKind.anthropic.defaultModel)

@@ -240,17 +240,22 @@ struct LLMPostProcessor: Sendable {
     func cleanup(
         transcription: GapiTranscription,
         style: CleanupStyle,
-        uzbekStyle: UzbekStyle = .tashkent
+        uzbekStyle: UzbekStyle = .tashkent,
+        modifiers: CleanupModifiers = .default,
+        targetAppName: String? = nil
     ) async throws -> String {
         let text = transcription.text
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return text }
-        guard let basePrompt = style.systemPrompt else { return text }
+        let resolvedStyle = modifiers.resolvedStyle(base: style, targetAppName: targetAppName)
+        guard let basePrompt = resolvedStyle.systemPrompt else { return text }
         guard config.isConfigured else { return text }
 
         let systemPrompt = ClaudeClient.buildSystemPrompt(
             base: basePrompt,
             transcription: transcription,
-            uzbekStyle: uzbekStyle
+            uzbekStyle: uzbekStyle,
+            modifiers: modifiers,
+            targetAppName: targetAppName
         )
         let userContent = ClaudeClient.buildUserPrompt(transcription: transcription)
 

@@ -185,17 +185,91 @@ struct DashboardSettingsView: View {
 
             PaperSettingRow(
                 "Обработка текста",
-                caption: settings.activeLLMConfig.privacyCaption,
+                caption: "\(settings.cleanupStyle.oneLineDescription) \(settings.activeLLMConfig.privacyCaption)",
                 systemImage: "sparkles",
                 tileTint: PaperTokens.dictationBlue
             ) {
-                Picker("", selection: $settings.cleanupStyle) {
-                    ForEach(CleanupStyle.allCases) { style in
-                        Text(style.shortTitle).tag(style)
+                HStack(spacing: 6) {
+                    Picker("", selection: $settings.cleanupStyle) {
+                        ForEach(CleanupStyle.allCases) { style in
+                            Text("\(style.shortTitle) (\(style.loadLabel))").tag(style)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(width: 210)
+
+                    CleanupStyleGuideButton()
                 }
-                .labelsHidden()
-                .frame(width: 210)
+            }
+
+            if settings.cleanupStyle != .off {
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Сжимать (без воды)",
+                    caption: "Превращает длинную речь в ёмкую мысль без повторов и вводных слов.",
+                    systemImage: "arrow.down.right.and.arrow.up.left",
+                    tileTint: PaperTokens.dictationBlue
+                ) {
+                    Toggle("", isOn: $settings.cleanupCompactMode)
+                        .labelsHidden()
+                        .toggleStyle(PaperToggleStyle())
+                }
+
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Списки и абзацы",
+                    caption: "Оформляет перечисления, шаги и задачи в аккуратный список или абзацы.",
+                    systemImage: "list.bullet",
+                    tileTint: PaperTokens.dictationBlue
+                ) {
+                    Toggle("", isOn: $settings.cleanupStructuredLists)
+                        .labelsHidden()
+                        .toggleStyle(PaperToggleStyle())
+                }
+
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Сохранять код и термины",
+                    caption: "Не переводит и не искажает пути, URL, команды и camelCase/snake_case.",
+                    systemImage: "chevron.left.forwardslash.chevron.right",
+                    tileTint: PaperTokens.dictationBlue
+                ) {
+                    Toggle("", isOn: $settings.cleanupPreserveTechTerms)
+                        .labelsHidden()
+                        .toggleStyle(PaperToggleStyle())
+                }
+
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Автотон по приложению",
+                    caption: "Telegram/WhatsApp/Slack → Дружественный; Mail/Notes/IDE → Деловой.",
+                    systemImage: "app.badge.checkmark",
+                    tileTint: PaperTokens.dictationBlue
+                ) {
+                    Toggle("", isOn: $settings.cleanupAutoToneByApp)
+                        .labelsHidden()
+                        .toggleStyle(PaperToggleStyle())
+                }
+
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Свой акцент (доп. правило)",
+                    caption: "Необязательно. Например: «Переводи на английский» или «Пиши без эмодзи».",
+                    systemImage: "text.bubble",
+                    tileTint: PaperTokens.dictationBlue
+                ) {
+                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                        TextField("Дополнительная инструкция для ИИ", text: $settings.cleanupCustomInstruction)
+                            .textFieldStyle(.plain)
+                            .font(fonts.ui)
+                    }
+                    .frame(width: 240)
+                }
             }
         }
     }

@@ -362,7 +362,9 @@ final class AppState: ObservableObject {
 
             // Применяем локальный словарь замен «слышится → пишется»
             var finalText = dictionary.apply(to: rawText)
-            let activeStyle = settings.cleanupStyle
+            let modifiers = settings.cleanupModifiers
+            let targetAppForCleanup = currentTargetAppName() ?? activeTargetApp
+            let activeStyle = modifiers.resolvedStyle(base: settings.cleanupStyle, targetAppName: targetAppForCleanup)
             let llmConfig = settings.activeLLMConfig
 
             if activeStyle != .off && llmConfig.isConfigured {
@@ -377,8 +379,10 @@ final class AppState: ObservableObject {
                 )
                 finalText = try await LLMPostProcessor(config: llmConfig).cleanup(
                     transcription: inputForLLM,
-                    style: activeStyle,
-                    uzbekStyle: settings.uzbekStyle
+                    style: settings.cleanupStyle,
+                    uzbekStyle: settings.uzbekStyle,
+                    modifiers: modifiers,
+                    targetAppName: targetAppForCleanup
                 )
                 finalText = dictionary.apply(to: finalText)
             }
@@ -467,7 +471,9 @@ final class AppState: ObservableObject {
             let cleaned = try await LLMPostProcessor(config: llmConfig).cleanup(
                 transcription: input,
                 style: style,
-                uzbekStyle: settings.uzbekStyle
+                uzbekStyle: settings.uzbekStyle,
+                modifiers: settings.cleanupModifiers,
+                targetAppName: record.targetApp
             )
             let final = dictionary.apply(to: cleaned)
             history.update(id: recordID) { item in
