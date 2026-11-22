@@ -366,8 +366,13 @@ final class AppState: ObservableObject {
             let targetAppForCleanup = currentTargetAppName() ?? activeTargetApp
             let activeStyle = modifiers.resolvedStyle(base: settings.cleanupStyle, targetAppName: targetAppForCleanup)
             let llmConfig = settings.activeLLMConfig
+            let llmSummary: String
 
-            if activeStyle != .off && llmConfig.isConfigured {
+            if activeStyle == .off {
+                llmSummary = "Без ИИ (выбран режим «Без обработки»)"
+            } else if !llmConfig.isConfigured {
+                llmSummary = "Без ИИ (не указан ключ \(llmConfig.provider.shortTitle))"
+            } else {
                 status = .cleaning
                 let inputForLLM = GapiTranscription(
                     text: finalText,
@@ -377,14 +382,25 @@ final class AppState: ObservableObject {
                     segments: [],
                     audioSeconds: result.audioSeconds
                 )
-                finalText = try await LLMPostProcessor(config: llmConfig).cleanup(
-                    transcription: inputForLLM,
-                    style: settings.cleanupStyle,
-                    uzbekStyle: settings.uzbekStyle,
-                    modifiers: modifiers,
-                    targetAppName: targetAppForCleanup
-                )
-                finalText = dictionary.apply(to: finalText)
+                let llmStart = CFAbsoluteTimeGetCurrent()
+                do {
+                    let cleaned = try await LLMPostProcessor(config: llmConfig).cleanup(
+                        transcription: inputForLLM,
+                        style: settings.cleanupStyle,
+                        uzbekStyle: settings.uzbekStyle,
+                        modifiers: modifiers,
+                        targetAppName: targetAppForCleanup
+                    )
+                    finalText = dictionary.apply(to: cleaned)
+                    let llmMs = max(1, Int(((CFAbsoluteTimeGetCurrent() - llmStart) * 1000).rounded()))
+                    llmSummary = "ИИ: \(llmConfig.provider.shortTitle) · \(llmConfig.resolvedModel) · \(activeStyle.shortTitle) (\(llmMs) мс)"
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch let urlErr as URLError where urlErr.code == .cancelled {
+                    throw urlErr
+                } catch {
+                    llmSummary = "Ошибка \(llmConfig.provider.shortTitle): \(error.localizedDescription) (вставлен исходный текст)"
+                }
             }
 
             try Task.checkCancellation()
@@ -411,7 +427,8 @@ final class AppState: ObservableObject {
                 languageCode: result.languageCode,
                 languageSummary: result.languageSummary,
                 engine: result.engine,
-                latencyMs: result.latencyMs
+                latencyMs: result.latencyMs,
+                llmSummary: llmSummary
             )
             hotkeys.notifyRecordingEndedExternally()
             if insertOutcome == .inserted {
@@ -468,6 +485,7 @@ final class AppState: ObservableObject {
             segments: []
         )
         do {
+            let llmStart = CFAbsoluteTimeGetCurrent()
             let cleaned = try await LLMPostProcessor(config: llmConfig).cleanup(
                 transcription: input,
                 style: style,
@@ -475,6 +493,7 @@ final class AppState: ObservableObject {
                 modifiers: settings.cleanupModifiers,
                 targetAppName: record.targetApp
             )
+            let llmMs = max(1, Int(((CFAbsoluteTimeGetCurrent() - llmStart) * 1000).rounded()))
             let final = dictionary.apply(to: cleaned)
             history.update(id: recordID) { item in
                 item = TranscriptionRecord(
@@ -489,7 +508,8 @@ final class AppState: ObservableObject {
                     languageCode: item.languageCode,
                     languageSummary: item.languageSummary,
                     engine: item.engine,
-                    latencyMs: item.latencyMs
+                    latencyMs: item.latencyMs,
+                    llmSummary: "ИИ: \(llmConfig.provider.shortTitle) · \(llmConfig.resolvedModel) · \(style.shortTitle) (\(llmMs) мс)"
                 )
             }
         } catch {

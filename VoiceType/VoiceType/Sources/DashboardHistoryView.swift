@@ -332,6 +332,10 @@ struct DashboardHistoryView: View {
                         Spacer()
                     }
 
+                    if let llmSummary = record.llmSummary, !llmSummary.isEmpty {
+                        PaperLLMSummaryLine(summary: llmSummary)
+                    }
+
                     if !record.text.isEmpty {
                         HStack(spacing: 8) {
                             Button {

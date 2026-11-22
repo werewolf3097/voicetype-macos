@@ -19,6 +19,7 @@ struct TranscriptionRecord: Identifiable, Codable, Equatable {
     var languageSummary: String?
     var engine: String?
     var latencyMs: Int?
+    var llmSummary: String?
 
     init(
         id: UUID = UUID(),
@@ -32,7 +33,8 @@ struct TranscriptionRecord: Identifiable, Codable, Equatable {
         languageCode: String? = nil,
         languageSummary: String? = nil,
         engine: String? = nil,
-        latencyMs: Int? = nil
+        latencyMs: Int? = nil,
+        llmSummary: String? = nil
     ) {
         self.id = id
         self.date = date
@@ -46,12 +48,13 @@ struct TranscriptionRecord: Identifiable, Codable, Equatable {
         self.languageSummary = languageSummary
         self.engine = engine
         self.latencyMs = latencyMs
+        self.llmSummary = llmSummary
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, date, text, durationSeconds
         case status, targetApp, errorMessage, style
-        case languageCode, languageSummary, engine, latencyMs
+        case languageCode, languageSummary, engine, latencyMs, llmSummary
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +75,7 @@ struct TranscriptionRecord: Identifiable, Codable, Equatable {
         self.languageSummary = try container.decodeIfPresent(String.self, forKey: .languageSummary)
         self.engine = try container.decodeIfPresent(String.self, forKey: .engine)
         self.latencyMs = try container.decodeIfPresent(Int.self, forKey: .latencyMs)
+        self.llmSummary = try container.decodeIfPresent(String.self, forKey: .llmSummary)
     }
 
     var wordCount: Int {
@@ -115,7 +119,8 @@ final class HistoryStore: ObservableObject {
         languageCode: String? = nil,
         languageSummary: String? = nil,
         engine: String? = nil,
-        latencyMs: Int? = nil
+        latencyMs: Int? = nil,
+        llmSummary: String? = nil
     ) {
         if text.isEmpty && status != .failed {
             return
@@ -132,7 +137,8 @@ final class HistoryStore: ObservableObject {
             languageCode: languageCode,
             languageSummary: languageSummary,
             engine: engine,
-            latencyMs: latencyMs
+            latencyMs: latencyMs,
+            llmSummary: llmSummary
         )
         records.insert(record, at: 0)
         if records.count > maxRecords {

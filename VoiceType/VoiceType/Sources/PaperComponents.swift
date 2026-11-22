@@ -783,3 +783,26 @@ struct CleanupStyleGuideButton: View {
         }
     }
 }
+
+struct PaperLLMSummaryLine: View {
+    @Environment(\.paperTheme) private var theme
+    @Environment(\.paperFontPreset) private var fontPreset
+    let summary: String
+
+    var body: some View {
+        let fonts = PaperFonts(preset: fontPreset)
+        let isError = summary.hasPrefix("Ошибка")
+        let isSuccess = summary.hasPrefix("ИИ:")
+        let icon = isError ? "exclamationmark.triangle" : (isSuccess ? "sparkles" : "minus.circle")
+        let tint = isError ? theme.errorColor : (isSuccess ? theme.successColor : theme.secondaryInkColor)
+
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10.5))
+            Text(summary)
+                .font(fonts.caption)
+                .lineLimit(2)
+        }
+        .foregroundStyle(tint)
+    }
+}
