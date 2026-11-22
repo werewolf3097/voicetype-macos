@@ -62,6 +62,7 @@
 		D875CD782142CFEE06F7312F /* GapiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63D80FD81608ABCB7ECF1189 /* GapiClient.swift */; };
 		D9A398F85BFB58236AEB5AAA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43CC8D05C02FE1DC9F791B2F /* AppDelegate.swift */; };
 		E10E3BFA041144533C5A0B7F /* DashboardSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF33DDA564FA46E653A6F103 /* DashboardSettingsView.swift */; };
+		E688A0C476F8FFDE16EB7635 /* PermissionsChecklistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4942779D53F49FBDD6901115 /* PermissionsChecklistView.swift */; };
 		E73343D924B0F1A6B8C5CE93 /* RussianTransliterator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B99D35A61420C8F6909FD9E2 /* RussianTransliterator.swift */; };
 		E97AD2359099DDAF2F15DD9C /* DashboardHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C69AFF8A2BDE3F922F021D4 /* DashboardHomeView.swift */; };
 		EA4116739D8F68D3BD6B8FAA /* PermissionsHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F5A8542089BAFAF0481165 /* PermissionsHelper.swift */; };
@@ -88,6 +89,7 @@
 		434B7FF79F533D836E0BAE02 /* DashboardMeetingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardMeetingsView.swift; sourceTree = "<group>"; };
 		43CC8D05C02FE1DC9F791B2F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4867DFE5229711CA29F6228C /* DashboardHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHistoryView.swift; sourceTree = "<group>"; };
+		4942779D53F49FBDD6901115 /* PermissionsChecklistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsChecklistView.swift; sourceTree = "<group>"; };
 		565684B056D853C52BCBF406 /* Phase3IndicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase3IndicatorTests.swift; sourceTree = "<group>"; };
 		63D80FD81608ABCB7ECF1189 /* GapiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GapiClient.swift; sourceTree = "<group>"; };
 		66B187B6F55F20E36907FBB1 /* NotificationHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationHelper.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				66B187B6F55F20E36907FBB1 /* NotificationHelper.swift */,
 				0922BA428295CD4FA4241CB1 /* PaperComponents.swift */,
 				87F6245A79B7E7E8AE9738A4 /* PaperTheme.swift */,
+				4942779D53F49FBDD6901115 /* PermissionsChecklistView.swift */,
 				38F5A8542089BAFAF0481165 /* PermissionsHelper.swift */,
 				DF084FBC0A7AED8A73AC04AB /* RecordingIndicatorController.swift */,
 				FDF5C060AAEFC6E9B4EF67A5 /* RecordingIndicatorView.swift */,
@@ -361,6 +364,7 @@
 				A2822830C2DCB50261953929 /* NotificationHelper.swift in Sources */,
 				BDE55C657B2152C648B4669D /* PaperComponents.swift in Sources */,
 				150BD4FE6E5EDE4EA23C19F9 /* PaperTheme.swift in Sources */,
+				E688A0C476F8FFDE16EB7635 /* PermissionsChecklistView.swift in Sources */,
 				EA4116739D8F68D3BD6B8FAA /* PermissionsHelper.swift in Sources */,
 				9E128249C43CDDE844B6FB28 /* RecordingIndicatorController.swift in Sources */,
 				76190F56FD017AC44CFF97E6 /* RecordingIndicatorView.swift in Sources */,

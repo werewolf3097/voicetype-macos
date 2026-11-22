@@ -5,9 +5,9 @@ struct DashboardSettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var meetingsStore: MeetingsStore
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.paperTheme) private var paperTheme
     @Environment(\.paperFontPreset) private var fontPreset
+
     private enum HomeServerCheckState: Equatable {
         case idle
         case checking
@@ -22,340 +22,51 @@ struct DashboardSettingsView: View {
         expiredBytes: 0
     )
     @State private var homeServerCheckState: HomeServerCheckState = .idle
+    @State private var showAdvanced = false
 
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
     private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                PaperPageHeader(
-                    "Настройки",
-                    subtitle: "API-ключи, поведение хоткея, параметры встреч и системные разрешения",
-                    systemImage: "gearshape",
-                    tileTint: PaperTokens.settingsSlate
-                )
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    PaperPageHeader(
+                        "Настройки",
+                        subtitle: "Клавиша диктовки, индикатор, внешний вид, ключи API и разрешения.",
+                        systemImage: "gearshape",
+                        tileTint: PaperTokens.settingsSlate
+                    )
 
-                settingsCard("Ключи API") {
-                    settingRow(
-                        "Токен gapi",
-                        caption: "Создаётся в кабинете console.gapi.uz на вкладке «API-токены»."
-                    ) {
-                        SecureField("Вставьте API-токен", text: $settings.gapiToken)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(minWidth: 180, maxWidth: 280)
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    settingRow(
-                        "Anthropic API key",
-                        caption: "Необязательно. Используется для LLM-очистки диктовки и генерации рекапов."
-                    ) {
-                        SecureField("sk-ant-...", text: $settings.anthropicApiKey)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(minWidth: 180, maxWidth: 280)
-                    }
+                    dictationGroup
+                    indicatorGroup
+                    appearanceGroup
+                    apiKeysGroup
+                    permissionsGroup
+                        .id("permissions")
+                    advancedGroup
                 }
-
-                homeServerSettingsCard
-
-                settingsCard("Приложение") {
-                    settingRow(
-                        "Оформление",
-                        caption: "По умолчанию совпадает с темой macOS."
-                    ) {
-                        Picker("", selection: $settings.appearance) {
-                            ForEach(AppearanceMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-
-                    Divider().overlay(paperTheme.borderColor)
-
-                    settingRow(
-                        "Шрифт интерфейса",
-                        caption: "Выбор между New York + SF, Cormorant + Inter и системным SF."
-                    ) {
-                        Picker("", selection: $settings.fontPreset) {
-                            ForEach(FontPreset.allCases) { preset in
-                                Text(preset.rawValue).tag(preset)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-
-                    Divider().overlay(paperTheme.borderColor)
-
-                    settingRow(
-                        "Значок в Dock",
-                        caption: "Иконка в строке меню доступна всегда."
-                    ) {
-                        Toggle("", isOn: $settings.showDockIcon)
-                            .labelsHidden()
-                            .toggleStyle(PaperToggleStyle())
-                    }
-                }
-
-                settingsCard("Индикатор записи") {
-                    settingRow("Положение на экране") {
-                        Picker("", selection: $settings.indicatorPosition) {
-                            ForEach(IndicatorPosition.allCases) { pos in
-                                Text(pos.rawValue).tag(pos)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-
-                    if settings.indicatorPosition == .top {
-                        Divider().overlay(paperTheme.borderColor)
-
-                        settingRow(
-                            "Размещение",
-                            caption: "На Mac без выреза «Из выреза» работает как «Под строкой меню»."
-                        ) {
-                            Picker("", selection: $settings.indicatorPlacement) {
-                                ForEach(IndicatorPlacement.allCases) { placement in
-                                    Text(placement.rawValue).tag(placement)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 220)
-                        }
-                    }
-
-                    Divider().overlay(paperTheme.borderColor)
-
-                    settingRow("Вид обработки") {
-                        Picker("", selection: $settings.processingLook) {
-                            ForEach(ProcessingLook.allCases) { look in
-                                Text(look.rawValue).tag(look)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-                }
-
-                settingsCard("Голос и диктовка") {
-                    settingRow("Клавиша записи") {
-                        HStack(spacing: 8) {
-                            Picker("", selection: $settings.shortcutKey) {
-                                ForEach(ShortcutKey.allCases) { key in
-                                    Text(key.displayName).tag(key)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 120)
-                            .onChange(of: settings.shortcutKey) { _, _ in
-                                appState.restartHotkeyListener()
-                            }
-
-                            Picker("", selection: $settings.shortcutSide) {
-                                ForEach(ShortcutSide.allCases) { side in
-                                    Text(side.rawValue).tag(side)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 100)
-                            .onChange(of: settings.shortcutSide) { _, _ in
-                                appState.restartHotkeyListener()
-                            }
-                        }
-                    }
-
-                    Divider().overlay(paperTheme.borderColor)
-
-                    settingRow(
-                        "Режим записи",
-                        caption: settings.shortcutMode.descriptionText
-                    ) {
-                        Picker("", selection: $settings.shortcutMode) {
-                            ForEach(ShortcutMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 240)
-                        .onChange(of: settings.shortcutMode) { _, _ in
-                            appState.refreshPermissionsAndHotkey()
-                        }
-                    }
-
-                    Divider().overlay(paperTheme.borderColor)
-
-                    settingRow("Вставка текста") {
-                        Picker("", selection: $settings.pasteMode) {
-                            ForEach(PasteMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-
-                    Divider().overlay(paperTheme.borderColor)
-
-                    settingRow(
-                        "Восстанавливать буфер обмена",
-                        caption: "Возвращает прежнее содержимое буфера через ~400 мс после автовставки."
-                    ) {
-                        Toggle("", isOn: $settings.restoreClipboard)
-                            .labelsHidden()
-                            .toggleStyle(PaperToggleStyle())
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    settingRow("Обработка текста") {
-                        Picker("", selection: $settings.cleanupStyle) {
-                            ForEach(CleanupStyle.allCases) { style in
-                                Text(style.rawValue).tag(style)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    settingRow(
-                        "Узбекский диалект",
-                        caption: "«Ташкентский» сохраняет живую разговорную речь (qivommiz, kevotti, qatta)."
-                    ) {
-                        Picker("", selection: $settings.uzbekStyle) {
-                            ForEach(UzbekStyle.allCases) { style in
-                                Text(style.rawValue).tag(style)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-                }
-
-                settingsCard("Встречи") {
-                    settingRow(
-                        "Сервер распознавания",
-                        caption: "Необязательно. URL внешнего сервера транскрибации; если поле пустое — используется облако gapi.uz."
-                    ) {
-                        TextField("https://... или http://...", text: $settings.whisperServerURL)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(minWidth: 180, maxWidth: 280)
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    settingRow(
-                        "Источник звука встреч",
-                        caption: "«Микрофон + Системный звук» разделяет каналы («Вы» и «Собеседники»)."
-                    ) {
-                        Picker("", selection: $settings.meetingAudioSource) {
-                            ForEach(MeetingAudioSource.allCases) { source in
-                                Text(source.rawValue).tag(source)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    exportDestinationRow
-
-                    Divider().overlay(theme.border)
-
-                    settingRow(
-                        "Резюме на стороне gapi (×1.3)",
-                        caption: "Применимо при отправке в gapi.uz. По умолчанию выключено."
-                    ) {
-                        Toggle("", isOn: $settings.enableGapiSummary)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .tint(theme.accent)
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    audioRetentionRow
-                }
-
-                settingsCard("Разрешения macOS") {
-                    settingRow(
-                        "Мониторинг ввода",
-                        caption: "Нужен для работы глобального хоткея поверх всех окон."
-                    ) {
-                        if appState.hotkeyActive {
-                            permissionStatus(status: "Разрешён", granted: true, buttonTitle: "Настройки") {
-                                PermissionsHelper.openInputMonitoringSettings()
-                            }
-                        } else if appState.inputMonitoringAuthorized {
-                            permissionStatus(status: "Нужен перезапуск", granted: false, buttonTitle: "Перезапустить") {
-                                PermissionsHelper.relaunchApp()
-                            }
-                        } else {
-                            permissionStatus(status: "Нужно разрешить", granted: false, buttonTitle: "Разрешить") {
-                                PermissionsHelper.openInputMonitoringSettings()
-                            }
-                        }
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    settingRow("Микрофон", caption: "Нужен для диктовки и записи встреч.") {
-                        permissionStatus(
-                            status: appState.microphoneAuthorized ? "Разрешён" : "Нужно разрешить",
-                            granted: appState.microphoneAuthorized,
-                            buttonTitle: appState.microphoneAuthorized ? "Настройки" : "Разрешить"
-                        ) {
-                            PermissionsHelper.openMicrophoneSettings()
-                        }
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    settingRow("Accessibility", caption: "Нужен для автовставки (Cmd+V) и отмены по Escape.") {
-                        permissionStatus(
-                            status: appState.accessibilityAuthorized ? "Разрешён" : "Нужно разрешить",
-                            granted: appState.accessibilityAuthorized,
-                            buttonTitle: appState.accessibilityAuthorized ? "Настройки" : "Разрешить"
-                        ) {
-                            PermissionsHelper.openAccessibilitySettings()
-                        }
-                    }
-
-                    Divider().overlay(theme.border)
-
-                    settingRow(
-                        "Системный звук",
-                        caption: "Запись системного звука во время встреч для распознавания речи собеседников. Если тумблер уже включён после пересборки, переключите его заново и перезапустите."
-                    ) {
-                        HStack(spacing: 6) {
-                            permissionStatus(
-                                status: appState.screenCaptureAuthorized ? "Разрешён" : "Нужно разрешить",
-                                granted: appState.screenCaptureAuthorized,
-                                buttonTitle: appState.screenCaptureAuthorized ? "Настройки" : "Разрешить"
-                            ) {
-                                PermissionsHelper.openScreenCaptureSettings()
-                            }
-                            if !appState.screenCaptureAuthorized {
-                                Button("Перезапустить") {
-                                    PermissionsHelper.relaunchApp()
-                                }
-                                .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
-                            }
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(PaperTokens.contentPadding)
+            }
+            .onAppear {
+                if appState.focusPermissionsInSettings {
+                    appState.focusPermissionsInSettings = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            scrollProxy.scrollTo("permissions", anchor: .top)
                         }
                     }
                 }
             }
-            .frame(maxWidth: 740, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
+            .onChange(of: appState.focusPermissionsInSettings) { _, shouldScroll in
+                if shouldScroll {
+                    appState.focusPermissionsInSettings = false
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        scrollProxy.scrollTo("permissions", anchor: .top)
+                    }
+                }
+            }
         }
         .background { PaperBackground() }
         .onAppear {
@@ -376,51 +87,429 @@ struct DashboardSettingsView: View {
         }
     }
 
+    // MARK: - Groups
+
+    private var dictationGroup: some View {
+        PaperSettingGroup("Диктовка") {
+            PaperSettingRow(
+                "Клавиша и сторона",
+                caption: "Клавиша-модификатор для запуска диктовки из любого приложения.",
+                systemImage: "command",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                HStack(spacing: 8) {
+                    Picker("", selection: $settings.shortcutKey) {
+                        ForEach(ShortcutKey.allCases) { key in
+                            Text(key.displayName).tag(key)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 120)
+                    .onChange(of: settings.shortcutKey) { _, _ in
+                        appState.restartHotkeyListener()
+                    }
+
+                    Picker("", selection: $settings.shortcutSide) {
+                        ForEach(ShortcutSide.allCases) { side in
+                            Text(side.rawValue).tag(side)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 100)
+                    .onChange(of: settings.shortcutSide) { _, _ in
+                        appState.restartHotkeyListener()
+                    }
+                }
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Режим клавиши",
+                caption: settings.shortcutMode.descriptionText,
+                systemImage: "hand.tap",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                PaperSegmentedControl(
+                    options: ShortcutMode.allCases.map { .init(id: $0, title: $0.shortTitle) },
+                    selection: $settings.shortcutMode,
+                    compact: true
+                )
+                .onChange(of: settings.shortcutMode) { _, _ in
+                    appState.refreshPermissionsAndHotkey()
+                }
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Вставка текста",
+                caption: "Если автовставка невозможна, текст останется в буфере обмена.",
+                systemImage: "doc.on.clipboard",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                PaperSegmentedControl(
+                    options: PasteMode.allCases.map { .init(id: $0, title: $0.shortTitle) },
+                    selection: $settings.pasteMode,
+                    compact: true
+                )
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Восстанавливать буфер обмена",
+                caption: "Возвращает прежнее содержимое буфера через ~400 мс после автовставки.",
+                systemImage: "arrow.uturn.backward",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                Toggle("", isOn: $settings.restoreClipboard)
+                    .labelsHidden()
+                    .toggleStyle(PaperToggleStyle())
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Обработка текста",
+                caption: "Текст отправляется в Anthropic API. Без ключа текст вставляется как распознан.",
+                systemImage: "sparkles",
+                tileTint: PaperTokens.dictationBlue
+            ) {
+                Picker("", selection: $settings.cleanupStyle) {
+                    ForEach(CleanupStyle.allCases) { style in
+                        Text(style.shortTitle).tag(style)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 210)
+            }
+        }
+    }
+
+    private var indicatorGroup: some View {
+        PaperSettingGroup("Индикатор записи") {
+            PaperSettingRow(
+                "Положение на экране",
+                caption: "Плавающая волна видна только во время диктовки и не забирает фокус.",
+                systemImage: "rectangle.topthird.inset.filled",
+                tileTint: PaperTokens.historyGreen
+            ) {
+                PaperSegmentedControl(
+                    options: IndicatorPosition.allCases.map { .init(id: $0, title: $0.rawValue) },
+                    selection: $settings.indicatorPosition,
+                    compact: true
+                )
+            }
+
+            if settings.indicatorPosition == .top {
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Размещение",
+                    caption: "На Mac без выреза «Из выреза» работает как «Под строкой меню».",
+                    systemImage: "menubar.rectangle",
+                    tileTint: PaperTokens.historyGreen
+                ) {
+                    Picker("", selection: $settings.indicatorPlacement) {
+                        ForEach(IndicatorPlacement.allCases) { placement in
+                            Text(placement.rawValue).tag(placement)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 210)
+                }
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Вид обработки",
+                caption: "Анимация на время распознавания и обработки текста.",
+                systemImage: "waveform.path",
+                tileTint: PaperTokens.historyGreen
+            ) {
+                Picker("", selection: $settings.processingLook) {
+                    ForEach(ProcessingLook.allCases) { look in
+                        Text(look.rawValue).tag(look)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 210)
+            }
+        }
+    }
+
+    private var appearanceGroup: some View {
+        PaperSettingGroup("Внешний вид") {
+            PaperSettingRow(
+                "Оформление",
+                caption: "По умолчанию совпадает с системной темой macOS.",
+                systemImage: "circle.lefthalf.filled",
+                tileTint: PaperTokens.settingsSlate
+            ) {
+                PaperSegmentedControl(
+                    options: AppearanceMode.allCases.map { .init(id: $0, title: $0.rawValue) },
+                    selection: $settings.appearance,
+                    compact: true
+                )
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Шрифт интерфейса",
+                caption: "Выбор между New York + SF, Cormorant + Inter и системным SF.",
+                systemImage: "textformat",
+                tileTint: PaperTokens.settingsSlate
+            ) {
+                Picker("", selection: $settings.fontPreset) {
+                    ForEach(FontPreset.allCases) { preset in
+                        Text(preset.rawValue).tag(preset)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220)
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Значок в Dock",
+                caption: "Значок в строке меню доступен всегда.",
+                systemImage: "dock.rectangle",
+                tileTint: PaperTokens.settingsSlate
+            ) {
+                Toggle("", isOn: $settings.showDockIcon)
+                    .labelsHidden()
+                    .toggleStyle(PaperToggleStyle())
+            }
+        }
+    }
+
+    private var apiKeysGroup: some View {
+        PaperSettingGroup("Ключи API") {
+            PaperSettingRow(
+                "Токен gapi.uz",
+                caption: "Аудио для распознавания отправляется на console.gapi.uz. Токен хранится в Keychain.",
+                systemImage: "key",
+                tileTint: PaperTokens.dictionaryTeal
+            ) {
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                    SecureField("Вставьте API-токен", text: $settings.gapiToken)
+                        .textFieldStyle(.plain)
+                        .font(fonts.ui)
+                }
+                .frame(width: 240)
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Anthropic API key",
+                caption: "Необязательно. Используется для обработки диктовки и рекапов встреч. Хранится в Keychain.",
+                systemImage: "lock.shield",
+                tileTint: PaperTokens.dictionaryTeal
+            ) {
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                    SecureField("sk-ant-...", text: $settings.anthropicApiKey)
+                        .textFieldStyle(.plain)
+                        .font(fonts.ui)
+                }
+                .frame(width: 240)
+            }
+        }
+    }
+
+    private var permissionsGroup: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Разрешения")
+                .font(fonts.captionMedium)
+                .foregroundStyle(paperTheme.secondaryInkColor)
+                .padding(.horizontal, 4)
+
+            PermissionsChecklistView(includeScreenCapture: true, showAllWhenGranted: true)
+        }
+    }
+
+    // MARK: - Collapsible Advanced Group
+
+    private var advancedGroup: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeOut(duration: 0.16)) {
+                    showAdvanced.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: showAdvanced ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                        .frame(width: 14)
+
+                    Text("Дополнительно")
+                        .font(fonts.uiMedium)
+                        .foregroundStyle(paperTheme.inkColor)
+
+                    Text("Домашний сервер, параметры встреч и диалект")
+                        .font(fonts.caption)
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                        .lineLimit(1)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(
+                    paperTheme.surfaceColor.opacity(0.45),
+                    in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                        .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Дополнительные настройки")
+
+            if showAdvanced {
+                VStack(alignment: .leading, spacing: 18) {
+                    homeServerSettingsCard
+
+                    PaperSettingGroup("Язык и встречи") {
+                        PaperSettingRow(
+                            "Узбекский диалект",
+                            caption: "«Ташкентский» сохраняет живую разговорную речь (qivommiz, kevotti, qatta).",
+                            systemImage: "character.bubble",
+                            tileTint: PaperTokens.meetingsIndigo
+                        ) {
+                            Picker("", selection: $settings.uzbekStyle) {
+                                ForEach(UzbekStyle.allCases) { style in
+                                    Text(style.rawValue).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 220)
+                        }
+
+                        hairlineDivider
+
+                        PaperSettingRow(
+                            "Сервер распознавания встреч",
+                            caption: "URL внешнего сервера Whisper; если пусто — используется облако gapi.uz.",
+                            systemImage: "server.rack",
+                            tileTint: PaperTokens.meetingsIndigo
+                        ) {
+                            PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                                TextField("https://... или http://...", text: $settings.whisperServerURL)
+                                    .textFieldStyle(.plain)
+                                    .font(fonts.ui)
+                            }
+                            .frame(width: 240)
+                        }
+
+                        hairlineDivider
+
+                        PaperSettingRow(
+                            "Источник звука встреч",
+                            caption: "«Микрофон + Системный звук» разделяет каналы («Вы» и «Собеседники»).",
+                            systemImage: "person.2.wave.2",
+                            tileTint: PaperTokens.meetingsIndigo
+                        ) {
+                            Picker("", selection: $settings.meetingAudioSource) {
+                                ForEach(MeetingAudioSource.allCases) { source in
+                                    Text(source.rawValue).tag(source)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 220)
+                        }
+
+                        hairlineDivider
+
+                        exportDestinationRow
+
+                        hairlineDivider
+
+                        PaperSettingRow(
+                            "Резюме на стороне gapi (×1.3)",
+                            caption: "Применимо при отправке встреч в gapi.uz.",
+                            systemImage: "doc.plaintext",
+                            tileTint: PaperTokens.meetingsIndigo
+                        ) {
+                            Toggle("", isOn: $settings.enableGapiSummary)
+                                .labelsHidden()
+                                .toggleStyle(PaperToggleStyle())
+                        }
+
+                        hairlineDivider
+
+                        audioRetentionRow
+                    }
+                }
+            }
+        }
+    }
+
     private var homeServerSettingsCard: some View {
-        settingsCard("Домашний сервер (шлюз диктовки)") {
-            settingRow(
+        PaperSettingGroup("Домашний сервер (шлюз диктовки)") {
+            PaperSettingRow(
                 "Использовать домашний сервер",
-                caption: "Отправляет сжатое аудио (Opus 24 кбит/с) на шлюз в Tailscale. При недоступности за 3 с автоматически переключается на gapi.uz."
+                caption: "Отправляет сжатое аудио (Opus 24 кбит/с) на шлюз в Tailscale. При недоступности за 3 с переключается на gapi.uz.",
+                systemImage: "network",
+                tileTint: PaperTokens.dictationBlue
             ) {
                 Toggle("", isOn: $settings.useHomeServer)
                     .labelsHidden()
-                    .toggleStyle(.switch)
-                    .tint(theme.accent)
+                    .toggleStyle(PaperToggleStyle())
             }
 
-            Divider().overlay(theme.border)
+            hairlineDivider
 
-            settingRow(
+            PaperSettingRow(
                 "Адрес шлюза",
-                caption: "Например: http://100.79.78.37:8790"
+                caption: "Например: http://100.79.78.37:8790",
+                systemImage: "link",
+                tileTint: PaperTokens.dictationBlue
             ) {
-                TextField(HomeServerConfig.defaultURLString, text: $settings.homeServerURL)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 180, maxWidth: 280)
-                    .onChange(of: settings.homeServerURL) { _, _ in
-                        homeServerCheckState = .idle
-                    }
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                    TextField(HomeServerConfig.defaultURLString, text: $settings.homeServerURL)
+                        .textFieldStyle(.plain)
+                        .font(fonts.ui)
+                        .onChange(of: settings.homeServerURL) { _, _ in
+                            homeServerCheckState = .idle
+                        }
+                }
+                .frame(width: 240)
             }
 
-            Divider().overlay(theme.border)
+            hairlineDivider
 
-            settingRow(
+            PaperSettingRow(
                 "Токен авторизации",
-                caption: "Хранится только в macOS Keychain, не сохраняется в настройках и логах."
+                caption: "Хранится только в Keychain.",
+                systemImage: "key.horizontal",
+                tileTint: PaperTokens.dictationBlue
             ) {
-                SecureField("Bearer-токен шлюза", text: $settings.homeServerToken)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 180, maxWidth: 280)
-                    .onChange(of: settings.homeServerToken) { _, _ in
-                        homeServerCheckState = .idle
-                    }
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                    SecureField("Bearer-токен шлюза", text: $settings.homeServerToken)
+                        .textFieldStyle(.plain)
+                        .font(fonts.ui)
+                        .onChange(of: settings.homeServerToken) { _, _ in
+                            homeServerCheckState = .idle
+                        }
+                }
+                .frame(width: 240)
             }
 
-            Divider().overlay(theme.border)
+            hairlineDivider
 
-            settingRow(
+            PaperSettingRow(
                 "Режим распознавания",
-                caption: "«Авто» выбирает Gapi для узбекского и Parakeet → Whisper → Gapi для русского и английского."
+                caption: "«Авто» выбирает Gapi для узбекского и Parakeet → Whisper → Gapi для русского и английского.",
+                systemImage: "cpu",
+                tileTint: PaperTokens.dictationBlue
             ) {
                 Picker("", selection: $settings.homeServerEngine) {
                     ForEach(HomeServerEngine.allCases) { engine in
@@ -431,11 +520,13 @@ struct DashboardSettingsView: View {
                 .frame(width: 220)
             }
 
-            Divider().overlay(theme.border)
+            hairlineDivider
 
-            settingRow(
+            PaperSettingRow(
                 "Подсказка языка",
-                caption: "Передаётся в параметр lang шлюза (auto, ru, uz, en)."
+                caption: "Передаётся в параметр lang шлюза (auto, ru, uz, en).",
+                systemImage: "globe",
+                tileTint: PaperTokens.dictationBlue
             ) {
                 Picker("", selection: $settings.homeServerLanguage) {
                     ForEach(HomeServerLanguage.allCases) { lang in
@@ -446,27 +537,30 @@ struct DashboardSettingsView: View {
                 .frame(width: 220)
             }
 
-            Divider().overlay(theme.border)
+            hairlineDivider
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center, spacing: 16) {
-                    settingLabel(
-                        "Проверка соединения",
-                        caption: "Запрос GET /v1/health с проверкой токена и доступных движков."
-                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Проверка соединения")
+                            .font(fonts.uiMedium)
+                            .foregroundStyle(paperTheme.inkColor)
+                        Text("Запрос GET /v1/health с проверкой токена и доступных движков.")
+                            .font(fonts.caption)
+                            .foregroundStyle(paperTheme.secondaryInkColor)
+                    }
                     Spacer(minLength: 8)
                     Button {
                         checkHomeServerConnection()
                     } label: {
                         HStack(spacing: 6) {
                             if case .checking = homeServerCheckState {
-                                ProgressView()
-                                    .controlSize(.small)
+                                ProgressView().controlSize(.small)
                             }
                             Text("Проверить соединение")
                         }
                     }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                     .disabled(homeServerCheckState == .checking)
                 }
 
@@ -483,26 +577,42 @@ struct DashboardSettingsView: View {
         case .idle:
             EmptyView()
         case .checking:
-            HStack(spacing: 5) {
-                ClaudeIcon(name: "network", size: 10.5, weight: .light)
+            HStack(spacing: 6) {
+                Image(systemName: "network")
+                    .font(.system(size: 11))
                 Text("Подключаюсь к шлюзу…")
-                    .font(ClaudeFonts.micro)
+                    .font(fonts.caption)
             }
-            .foregroundStyle(theme.secondaryInk)
+            .foregroundStyle(paperTheme.secondaryInkColor)
         case .success(let summary):
-            HStack(spacing: 5) {
-                ClaudeIcon(name: "checkmark.circle", size: 10.5, weight: .light)
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 11.5))
                 Text(summary)
-                    .font(ClaudeFonts.micro)
+                    .font(fonts.caption)
             }
-            .foregroundStyle(theme.success)
+            .foregroundStyle(paperTheme.successColor)
         case .failure(let message):
-            HStack(spacing: 5) {
-                ClaudeIcon(name: "exclamationmark.triangle", size: 10.5, weight: .light)
-                Text(message)
-                    .font(ClaudeFonts.micro)
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(paperTheme.errorColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(message)
+                        .font(fonts.captionMedium)
+                        .foregroundStyle(paperTheme.inkColor)
+                    Text("Текущие настройки сохранены; диктовка продолжит работать через gapi.uz.")
+                        .font(fonts.micro)
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                }
+                Spacer()
+                Button("Повторить") {
+                    checkHomeServerConnection()
+                }
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
             }
-            .foregroundStyle(theme.warning)
+            .padding(10)
+            .paperSurface(level: .l1Inset, cornerRadius: PaperTokens.controlRadius)
         }
     }
 
@@ -528,10 +638,14 @@ struct DashboardSettingsView: View {
     private var audioRetentionRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 16) {
-                settingLabel(
-                    "Хранение аудиозаписей",
-                    caption: "Оригиналы аудио встреч автоматически удаляются по истечении срока (рекап и транскрипт сохраняются). Записи в очереди и с ошибкой не удаляются."
-                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Хранение аудиозаписей")
+                        .font(fonts.uiMedium)
+                        .foregroundStyle(paperTheme.inkColor)
+                    Text("Оригиналы аудио встреч удаляются по сроку; рекап и транскрипт сохраняются.")
+                        .font(fonts.caption)
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                }
                 Spacer(minLength: 8)
                 Picker("", selection: $settings.meetingAudioRetention) {
                     ForEach(MeetingAudioRetention.allCases) { retention in
@@ -543,30 +657,22 @@ struct DashboardSettingsView: View {
             }
 
             HStack(spacing: 10) {
-                if audioStats.totalBytes > 0 {
-                    HStack(spacing: 5) {
-                        ClaudeIcon(name: "waveform", size: 10.5, weight: .light)
-                        Text("На диске: \(formattedBytes(audioStats.totalBytes)) (\(meetingsCountLabel(audioStats.meetingsWithAudioCount)))")
-                            .font(ClaudeFonts.micro)
-                    }
-                    .foregroundStyle(theme.secondaryInk)
-                } else {
-                    HStack(spacing: 5) {
-                        ClaudeIcon(name: "checkmark.circle", size: 10.5, weight: .light)
-                        Text("Сохранённых аудиофайлов нет")
-                            .font(ClaudeFonts.micro)
-                    }
-                    .foregroundStyle(theme.secondaryInk)
-                }
+                Text(
+                    audioStats.totalBytes > 0
+                        ? "На диске: \(formattedBytes(audioStats.totalBytes)) (\(meetingsCountLabel(audioStats.meetingsWithAudioCount)))"
+                        : "Сохранённых аудиофайлов нет."
+                )
+                .font(fonts.micro)
+                .foregroundStyle(paperTheme.secondaryInkColor)
 
-                Spacer(minLength: 8)
+                Spacer()
 
                 if audioStats.expiredMeetingsCount > 0 {
                     Button("Очистить устаревшие (\(formattedBytes(audioStats.expiredBytes)))") {
                         appState.cleanupExpiredMeetingAudio()
                         refreshAudioStats()
                     }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                 }
             }
         }
@@ -574,64 +680,42 @@ struct DashboardSettingsView: View {
         .padding(.vertical, 12)
     }
 
-    private func refreshAudioStats() {
-        audioStats = meetingsStore.audioStorageStats(retention: settings.meetingAudioRetention)
-    }
-
-    private func formattedBytes(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-    }
-
-    private func meetingsCountLabel(_ count: Int) -> String {
-        let mod100 = count % 100
-        let mod10 = count % 10
-        if mod100 >= 11 && mod100 <= 14 {
-            return "\(count) встреч"
-        }
-        switch mod10 {
-        case 1: return "\(count) встреча"
-        case 2, 3, 4: return "\(count) встречи"
-        default: return "\(count) встреч"
-        }
-    }
-
     private var exportDestinationRow: some View {
         VStack(alignment: .leading, spacing: 8) {
-            settingLabel(
-                "Автоэкспорт рекапов",
-                caption: "Необязательно. Вставьте путь к папке для сохранения Markdown-файлов (*_vt.md) или URL внешнего сервиса (Webhook JSON). Оставьте пустым, чтобы отключить."
-            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Автоэкспорт рекапов")
+                    .font(fonts.uiMedium)
+                    .foregroundStyle(paperTheme.inkColor)
+                Text("Необязательно. Путь к папке (*_vt.md) или URL Webhook JSON.")
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+            }
 
             HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    TextField("Путь к папке или https://...", text: $settings.exportDestination)
-                        .textFieldStyle(.plain)
-                        .font(ClaudeFonts.ui)
-                        .foregroundStyle(theme.ink)
+                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 5.5) {
+                    HStack(spacing: 6) {
+                        TextField("Путь к папке или https://...", text: $settings.exportDestination)
+                            .textFieldStyle(.plain)
+                            .font(fonts.ui)
+                            .foregroundStyle(paperTheme.inkColor)
 
-                    if !settings.exportDestination.isEmpty {
-                        Button {
-                            settings.exportDestination = ""
-                        } label: {
-                            ClaudeIcon(name: "xmark", size: 10, weight: .regular)
-                                .foregroundStyle(theme.secondaryInk)
+                        if !settings.exportDestination.isEmpty {
+                            Button {
+                                settings.exportDestination = ""
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(paperTheme.secondaryInkColor)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        .help("Очистить")
                     }
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5.5)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(theme.border, lineWidth: 1)
-                )
 
                 Button("Выбрать папку…") {
                     chooseExportFolder()
                 }
-                .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
             }
 
             exportDestinationStatusHint
@@ -646,20 +730,39 @@ struct DashboardSettingsView: View {
         case .none:
             EmptyView()
         case .webhook(let url):
-            HStack(spacing: 5) {
-                ClaudeIcon(name: "checkmark.circle", size: 10.5, weight: .light)
-                Text("Экспорт по Webhook URL (\(url.host ?? url.absoluteString))")
-                    .font(ClaudeFonts.micro)
-            }
-            .foregroundStyle(theme.success)
+            Text("Экспорт по Webhook URL (\(url.host ?? url.absoluteString))")
+                .font(fonts.micro)
+                .foregroundStyle(paperTheme.successColor)
         case .folder(let folderURL):
             let exists = FileManager.default.fileExists(atPath: folderURL.path)
-            HStack(spacing: 5) {
-                ClaudeIcon(name: exists ? "checkmark.circle" : "folder.badge.plus", size: 10.5, weight: .light)
-                Text(exists ? "Папка найдена: \(folderURL.lastPathComponent)" : "Папка будет создана при экспорте")
-                    .font(ClaudeFonts.micro)
-            }
-            .foregroundStyle(exists ? theme.success : theme.secondaryInk)
+            Text(exists ? "Папка найдена: \(folderURL.lastPathComponent)" : "Папка будет создана при экспорте.")
+                .font(fonts.micro)
+                .foregroundStyle(exists ? paperTheme.successColor : paperTheme.secondaryInkColor)
+        }
+    }
+
+    private var hairlineDivider: some View {
+        Rectangle()
+            .fill(paperTheme.borderColor)
+            .frame(height: PaperTokens.hairline)
+    }
+
+    private func refreshAudioStats() {
+        audioStats = meetingsStore.audioStorageStats(retention: settings.meetingAudioRetention)
+    }
+
+    private func formattedBytes(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private func meetingsCountLabel(_ count: Int) -> String {
+        let mod100 = count % 100
+        let mod10 = count % 10
+        if mod100 >= 11 && mod100 <= 14 { return "\(count) встреч" }
+        switch mod10 {
+        case 1: return "\(count) встреча"
+        case 2, 3, 4: return "\(count) встречи"
+        default: return "\(count) встреч"
         }
     }
 
@@ -673,57 +776,6 @@ struct DashboardSettingsView: View {
         panel.message = "Выберите папку для автоматического экспорта рекапов"
         if panel.runModal() == .OK, let url = panel.url {
             settings.exportDestination = url.path
-        }
-    }
-
-    private func settingsCard<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        PaperSettingGroup(title, content: content)
-    }
-
-    private func settingRow<Control: View>(
-        _ title: String,
-        caption: String? = nil,
-        @ViewBuilder control: () -> Control
-    ) -> some View {
-        PaperSettingRow(title, caption: caption, control: control)
-    }
-
-    private func settingLabel(_ title: String, caption: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(fonts.uiMedium)
-                .foregroundStyle(paperTheme.inkColor)
-            if let caption {
-                Text(caption)
-                    .font(fonts.caption)
-                    .foregroundStyle(paperTheme.secondaryInkColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func permissionStatus(
-        status: String,
-        granted: Bool,
-        buttonTitle: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 8) {
-            ClaudeIcon(name: granted ? "checkmark.circle" : "exclamationmark.triangle", size: 12.5, weight: .light)
-                .foregroundStyle(granted ? theme.success : theme.warning)
-            Text(status)
-                .font(ClaudeFonts.smallMedium)
-                .foregroundStyle(granted ? theme.secondaryInk : theme.warning)
-            if granted {
-                Button(buttonTitle, action: action)
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
-            } else {
-                Button(buttonTitle, action: action)
-                    .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
-            }
         }
     }
 }

@@ -28,6 +28,7 @@ struct VoiceTypeApp: App {
             MenuBarView()
                 .environmentObject(appState)
                 .environmentObject(settings)
+                .environmentObject(history)
                 .environmentObject(appState.meetings)
                 .environment(\.proEntitlement, entitlement)
                 .applyPaperEnvironment(settings)

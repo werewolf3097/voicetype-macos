@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum DashboardSection: String, CaseIterable, Identifiable {
-    case home = "Главная"
+    case home = "Диктовка"
     case meetings = "Встречи"
     case history = "История"
     case dictionary = "Словарь"
@@ -12,30 +12,40 @@ enum DashboardSection: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .home: return "house"
+        case .home: return "waveform"
         case .meetings: return "person.2"
         case .history: return "clock"
         case .dictionary: return "book.closed"
         case .settings: return "gearshape"
         }
     }
+
+    var tileTint: Color {
+        switch self {
+        case .home: return PaperTokens.dictationBlue
+        case .meetings: return PaperTokens.meetingsIndigo
+        case .history: return PaperTokens.historyGreen
+        case .dictionary: return PaperTokens.dictionaryTeal
+        case .settings: return PaperTokens.settingsSlate
+        }
+    }
+
+    static var mainSections: [DashboardSection] {
+        [.home, .meetings, .history, .dictionary]
+    }
 }
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.paperTheme) private var paperTheme
     @Environment(\.paperFontPreset) private var fontPreset
 
     @State private var sidebarVisible = true
     @State private var userToggledSidebar = false
 
-    private static let sidebarWidth: CGFloat = 222
+    private static let sidebarWidth: CGFloat = 224
     private static let collapsedTopBarHeight: CGFloat = 44
-
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
-    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private var currentSection: DashboardSection {
         appState.selectedSection ?? .home
@@ -43,7 +53,7 @@ struct SettingsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ClaudeSidebarView(
+            PaperSidebarView(
                 isVisible: sidebarVisible,
                 onCollapse: {
                     userToggledSidebar = true
@@ -82,7 +92,7 @@ struct SettingsView: View {
             GeometryReader { geo in
                 Color.clear
                     .onChange(of: geo.size.width) { _, newWidth in
-                        let threshold: CGFloat = currentSection == .meetings ? 940 : 780
+                        let threshold: CGFloat = currentSection == .meetings ? 940 : 760
                         if newWidth < threshold && sidebarVisible && !userToggledSidebar {
                             setSidebarVisible(false)
                         } else if newWidth >= threshold + 60 && !sidebarVisible && !userToggledSidebar {
@@ -141,13 +151,12 @@ private struct DashboardDetailHostView: View, Equatable {
     }
 }
 
-// MARK: - Claude-Style Sidebar
+// MARK: - Paper Sidebar
 
-private struct ClaudeSidebarView: View {
+private struct PaperSidebarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var meetingsStore: MeetingsStore
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.paperTheme) private var paperTheme
     @Environment(\.paperFontPreset) private var fontPreset
 
@@ -157,7 +166,6 @@ private struct ClaudeSidebarView: View {
     @State private var hoveredSection: DashboardSection?
     @State private var hoveredMeetingID: UUID?
 
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
     private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private var currentSection: DashboardSection {
@@ -175,9 +183,13 @@ private struct ClaudeSidebarView: View {
         }.count
     }
 
+    private var hasPermissionProblem: Bool {
+        !appState.hotkeyActive || !appState.microphoneAuthorized
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Primary Granola-style "+ New" CTA + sidebar collapse button
+            // Top bar: "+ Новая встреча" + collapse sidebar button
             HStack(spacing: 8) {
                 if let activeID = appState.activeMeetingID {
                     Button {
@@ -185,19 +197,19 @@ private struct ClaudeSidebarView: View {
                         appState.selectedSection = .meetings
                     } label: {
                         HStack(spacing: 6) {
-                            ClaudeIcon(name: "waveform", size: 12, weight: .regular)
-                                .symbolEffect(.variableColor.iterative, isActive: isVisible)
+                            Image(systemName: "waveform")
+                                .font(.system(size: 11.5, weight: .medium))
                             Text("Запись")
-                                .font(ClaudeFonts.uiMedium)
+                                .font(fonts.uiMedium)
                                 .lineLimit(1)
                             Spacer(minLength: 2)
                             Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
-                                .font(ClaudeFonts.smallMedium.monospacedDigit())
+                                .font(fonts.captionMedium.monospacedDigit())
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(theme.danger, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(PaperTokens.recordingRed, in: RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -211,50 +223,49 @@ private struct ClaudeSidebarView: View {
                         }
                     } label: {
                         HStack(spacing: 6) {
-                            ClaudeIcon(name: "plus", size: 11.5, weight: .regular)
-                                .foregroundStyle(theme.secondaryInk)
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(paperTheme.secondaryInkColor)
                             Text("Новая встреча")
-                                .font(ClaudeFonts.uiMedium)
-                                .foregroundStyle(theme.ink)
+                                .font(fonts.uiMedium)
+                                .foregroundStyle(paperTheme.inkColor)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 9)
                         .padding(.vertical, 6)
-                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(theme.border, lineWidth: 1)
-                        )
+                        .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.controlRadius)
                     }
                     .buttonStyle(.plain)
                 }
 
                 Button(action: onCollapse) {
-                    ClaudeIcon(name: "sidebar.left", size: 13.5, weight: .light)
-                        .foregroundStyle(theme.secondaryInk)
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(paperTheme.secondaryInkColor)
                         .frame(width: 26, height: 26)
-                        .background(theme.hoverFill.opacity(0.6), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .background(paperTheme.hoverColor.opacity(0.6), in: RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .help("Скрыть боковую панель")
+                .accessibilityLabel("Скрыть боковую панель")
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
             .padding(.bottom, 10)
 
-            // Navigation items
+            // Main navigation items
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(DashboardSection.allCases) { section in
+                ForEach(DashboardSection.mainSections) { section in
                     sidebarNavRow(section)
                 }
             }
             .padding(.horizontal, 10)
 
             if !meetingsStore.meetings.isEmpty {
-                Text("Недавние")
-                    .font(ClaudeFonts.microMedium)
-                    .foregroundStyle(theme.tertiaryInk)
+                Text("Недавние встречи")
+                    .font(fonts.micro)
+                    .foregroundStyle(paperTheme.tertiaryInkColor)
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
                     .padding(.bottom, 5)
@@ -269,43 +280,59 @@ private struct ClaudeSidebarView: View {
                 }
                 .scrollIndicators(.hidden)
             } else {
-                Spacer()
+                Spacer(minLength: 8)
             }
 
             Spacer(minLength: 8)
 
-            // Bottom status pill
-            Divider()
-                .overlay(theme.border)
+            // Settings pinned to bottom of sidebar
+            VStack(alignment: .leading, spacing: 6) {
+                sidebarNavRow(.settings)
+                    .padding(.horizontal, 10)
 
-            Button {
-                appState.selectedSection = .settings
-            } label: {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(sidebarStatusColor)
-                        .frame(width: 7, height: 7)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(sidebarStatusTitle)
-                            .font(ClaudeFonts.smallMedium)
-                            .foregroundStyle(theme.ink)
-                            .lineLimit(1)
-                        Text(settings.shortcutDisplayLabel)
-                            .font(ClaudeFonts.micro)
-                            .foregroundStyle(theme.secondaryInk)
-                            .lineLimit(1)
+                Rectangle()
+                    .fill(paperTheme.borderColor)
+                    .frame(height: PaperTokens.hairline)
+
+                Button {
+                    if hasPermissionProblem {
+                        appState.focusPermissionsInSettings = true
+                        appState.selectedSection = .settings
+                    } else {
+                        appState.selectedSection = .home
                     }
-                    Spacer()
-                    ClaudeIcon(name: "slider.horizontal.3", size: 12, weight: .light)
-                        .foregroundStyle(theme.secondaryInk)
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(sidebarStatusColor)
+                            .frame(width: 7, height: 7)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(sidebarStatusTitle)
+                                .font(fonts.captionMedium)
+                                .foregroundStyle(paperTheme.inkColor)
+                                .lineLimit(1)
+                            Text(hasPermissionProblem ? "Открыть разрешения" : settings.shortcutDisplayLabel)
+                                .font(fonts.micro)
+                                .foregroundStyle(paperTheme.secondaryInkColor)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if hasPermissionProblem {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(paperTheme.secondaryInkColor)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .paperSurface(level: .l1Inset, cornerRadius: PaperTokens.controlRadius)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6.5)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+                .accessibilityLabel("Статус диктовки: \(sidebarStatusTitle)")
             }
-            .buttonStyle(.plain)
-            .padding(10)
         }
         .frame(maxHeight: .infinity)
         .background(paperTheme.sidebarColor)
@@ -323,10 +350,13 @@ private struct ClaudeSidebarView: View {
         return Button {
             appState.selectedSection = section
         } label: {
-            HStack(spacing: 8.5) {
-                ClaudeIcon(name: section.systemImage, size: 13.5, weight: isSelected ? .regular : .light)
-                    .foregroundStyle(isSelected ? paperTheme.inkColor : paperTheme.secondaryInkColor)
-                    .frame(width: 17)
+            HStack(spacing: 9) {
+                PaperSectionTile(
+                    systemImage: section.systemImage,
+                    tint: section.tileTint,
+                    size: 22,
+                    iconSize: 11
+                )
 
                 Text(section.rawValue)
                     .font(isSelected ? fonts.uiMedium : fonts.ui)
@@ -344,8 +374,8 @@ private struct ClaudeSidebarView: View {
                         .background(paperTheme.insetColor, in: Capsule())
                 }
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5.5)
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
@@ -378,22 +408,23 @@ private struct ClaudeSidebarView: View {
                 } else if case .summarizing = meeting.status {
                     ProgressView().controlSize(.mini)
                 } else if meeting.status == .recording {
-                    Circle().fill(theme.danger).frame(width: 6, height: 6)
+                    Circle().fill(PaperTokens.recordingRed).frame(width: 6, height: 6)
                 } else {
-                    ClaudeIcon(name: "doc", size: 10.5, weight: .light)
-                        .foregroundStyle(theme.tertiaryInk)
+                    Image(systemName: "doc")
+                        .font(.system(size: 10.5, weight: .light))
+                        .foregroundStyle(paperTheme.tertiaryInkColor)
                 }
                 Text(meeting.title)
-                    .font(isActiveMeeting ? ClaudeFonts.smallMedium : ClaudeFonts.small)
-                    .foregroundStyle(isActiveMeeting ? theme.ink : theme.secondaryInk)
+                    .font(isActiveMeeting ? fonts.captionMedium : fonts.caption)
+                    .foregroundStyle(isActiveMeeting ? paperTheme.inkColor : paperTheme.secondaryInkColor)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4.5)
             .background(
-                RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                    .fill(isActiveMeeting ? theme.selectedFill : (isHovered ? theme.hoverFill : Color.clear))
+                RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
+                    .fill(isActiveMeeting ? paperTheme.selectedSidebarColor : (isHovered ? paperTheme.hoverColor : Color.clear))
             )
             .contentShape(Rectangle())
         }
@@ -404,20 +435,29 @@ private struct ClaudeSidebarView: View {
     }
 
     private var sidebarStatusColor: Color {
+        if hasPermissionProblem {
+            return paperTheme.errorColor
+        }
         switch appState.status {
-        case .idle: return appState.hotkeyActive ? theme.success : theme.warning
-        case .recording: return theme.danger
-        case .transcribing, .cleaning: return theme.accent
-        case .error: return theme.warning
+        case .idle: return paperTheme.successColor
+        case .recording: return PaperTokens.recordingRed
+        case .transcribing, .cleaning: return paperTheme.clipboardWarningColor
+        case .error: return paperTheme.errorColor
         }
     }
 
     private var sidebarStatusTitle: String {
+        if !appState.microphoneAuthorized {
+            return "Нет доступа к микрофону"
+        }
+        if !appState.hotkeyActive {
+            return "Хоткей не работает"
+        }
         switch appState.status {
-        case .idle: return appState.hotkeyActive ? "Готов слушать" : "Нужны права"
-        case .recording: return "Запись голоса…"
+        case .idle: return "Готов"
+        case .recording: return "Идёт запись"
         case .transcribing: return "Распознаю…"
-        case .cleaning: return "Обрабатываю…"
+        case .cleaning: return "Привожу в порядок…"
         case .error: return "Ошибка"
         }
     }
@@ -428,20 +468,22 @@ private struct ClaudeSidebarView: View {
 private struct CollapsedTopBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     let currentSection: DashboardSection
     let onExpand: () -> Void
 
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     var body: some View {
         HStack(spacing: 10) {
             Button(action: onExpand) {
-                ClaudeIcon(name: "sidebar.left", size: 13.5, weight: .light)
-                    .foregroundStyle(theme.secondaryInk)
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(paperTheme.secondaryInkColor)
                     .frame(width: 26, height: 26)
-                    .background(theme.hoverFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(paperTheme.hoverColor, in: RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous))
             }
             .buttonStyle(.plain)
             .help("Показать боковую панель")
@@ -456,21 +498,22 @@ private struct CollapsedTopBarView: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    ClaudeIcon(name: currentSection.systemImage, size: 12.5, weight: .light)
-                        .foregroundStyle(theme.secondaryInk)
+                    PaperSectionTile(
+                        systemImage: currentSection.systemImage,
+                        tint: currentSection.tileTint,
+                        size: 18,
+                        iconSize: 9.5
+                    )
                     Text(currentSection.rawValue)
-                        .font(ClaudeFonts.uiMedium)
-                        .foregroundStyle(theme.ink)
-                    ClaudeIcon(name: "chevron.down", size: 8.5, weight: .regular)
-                        .foregroundStyle(theme.secondaryInk)
+                        .font(fonts.uiMedium)
+                        .foregroundStyle(paperTheme.inkColor)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8.5, weight: .medium))
+                        .foregroundStyle(paperTheme.secondaryInkColor)
                 }
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4.5)
-                .background(theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(theme.border, lineWidth: 1)
-                )
+                .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.controlRadius)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -489,11 +532,12 @@ private struct CollapsedTopBarView: View {
                     }
                 } label: {
                     HStack(spacing: 5) {
-                        ClaudeIcon(name: "plus", size: 11, weight: .medium)
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .medium))
                         Text("Новая встреча")
                     }
                 }
-                .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+                .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
             } else {
                 Button {
                     appState.selectedMeetingID = appState.activeMeetingID
@@ -504,17 +548,21 @@ private struct CollapsedTopBarView: View {
                         Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
                             .monospacedDigit()
                     }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(PaperTokens.recordingRed, in: RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous))
                 }
-                .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(theme.sidebar.opacity(0.6))
+        .background(paperTheme.sidebarColor)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(theme.border)
-                .frame(height: 1)
+                .fill(paperTheme.borderColor)
+                .frame(height: PaperTokens.hairline)
         }
     }
 }
@@ -567,10 +615,10 @@ final class DashboardWindowController {
             newWindow.title = "VoiceType"
             newWindow.titleVisibility = .visible
             newWindow.titlebarAppearsTransparent = true
-            newWindow.backgroundColor = ClaudeTheme.windowBackgroundNSColor
+            newWindow.backgroundColor = PaperTheme.cleanSheet.base.nsColor
             newWindow.isMovableByWindowBackground = false
             newWindow.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            newWindow.setContentSize(NSSize(width: 1120, height: 700))
+            newWindow.setContentSize(NSSize(width: 1080, height: 680))
             newWindow.minSize = NSSize(width: 740, height: 540)
             newWindow.center()
             newWindow.isReleasedWhenClosed = false
@@ -596,6 +644,10 @@ final class DashboardWindowController {
         case .dark:
             window?.appearance = NSAppearance(named: .darkAqua)
         }
-        window?.backgroundColor = ClaudeTheme.windowBackgroundNSColor
+        let isDark = mode == .dark || (mode == .system && NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+        if let settings {
+            let resolved = PaperTheme.resolved(themeID: settings.paperThemeID, prefersDark: isDark)
+            window?.backgroundColor = resolved.base.nsColor
+        }
     }
 }

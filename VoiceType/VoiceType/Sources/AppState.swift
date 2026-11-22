@@ -12,6 +12,7 @@ final class AppState: ObservableObject {
         }
     }
     @Published var selectedSection: DashboardSection? = .home
+    @Published var focusPermissionsInSettings: Bool = false
     @Published var lastText: String = ""
     @Published var lastTargetApp: String? = nil
     @Published var lastInsertOutcome: InsertStatus? = nil

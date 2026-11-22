@@ -4,554 +4,364 @@ struct DashboardHomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var history: HistoryStore
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.paperTheme) private var paperTheme
     @Environment(\.paperFontPreset) private var fontPreset
 
-    @State private var quickMeetingTitle: String = ""
-    @State private var selectedTemplate: MeetingTemplate = .general
     @State private var copiedLast = false
+    @State private var reinsertedFeedback = false
 
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
     private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
+
+    private var hasRequiredPermissionIssue: Bool {
+        !appState.hotkeyActive
+            || !appState.microphoneAuthorized
+            || (settings.pasteMode == .autoPaste && !appState.accessibilityAuthorized)
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                heroHeader
-                    .padding(.top, 8)
+            VStack(alignment: .leading, spacing: 24) {
+                PaperPageHeader(
+                    "Диктовка",
+                    subtitle: "Надиктуйте текст в любом приложении с помощью клавиши.",
+                    systemImage: "waveform",
+                    tileTint: PaperTokens.dictationBlue
+                )
 
                 if case .error(let message) = appState.status {
-                    HStack(spacing: 10) {
-                        ClaudeIcon(name: "exclamationmark.triangle", size: 13, weight: .light)
-                            .foregroundStyle(theme.warning)
-                        Text(message)
-                            .font(ClaudeFonts.ui)
-                            .foregroundStyle(theme.ink)
-                        Spacer()
+                    errorBanner(message)
+                }
+
+                if hasRequiredPermissionIssue {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(permissionHeadline)
+                            .font(fonts.uiMedium)
+                            .foregroundStyle(paperTheme.errorColor)
+
+                        PermissionsChecklistView(includeScreenCapture: false, showAllWhenGranted: true)
                     }
-                    .padding(11)
-                    .background(theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(theme.warning.opacity(0.25))
-                    )
+                } else {
+                    readyStatusRow
                 }
 
-                if showsPermissionCard {
-                    permissionBanner
+                hotkeyCard
+
+                if let lastRecord = history.records.first {
+                    lastDictationSection(lastRecord)
                 }
 
-                claudeComposerCard
+                cleanupStyleSection
 
-                templateChipsRow
-
-                statsStrip
-
-                lastTranscriptSection
+                weeklyStatsLine
             }
-            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: 680, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
+            .padding(PaperTokens.contentPadding)
         }
         .scrollIndicators(.hidden)
         .background { PaperBackground() }
     }
 
-    // MARK: - Hero Header
+    // MARK: - Status & Permissions
 
-    private var heroHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 14) {
-                heroTitleBlock
-                Spacer(minLength: 12)
-                statusPill
-            }
+    private var permissionHeadline: String {
+        if !appState.microphoneAuthorized || !appState.hotkeyActive {
+            return "Хоткей пока не работает. Проверьте системные разрешения."
+        }
+        return "Для автовставки нужен «Универсальный доступ». Без него текст останется в буфере."
+    }
 
-            VStack(alignment: .leading, spacing: 10) {
-                heroTitleBlock
-                statusPill
-            }
+    private var readyStatusRow: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(statusDotColor)
+                .frame(width: 8, height: 8)
+
+            Text(statusText)
+                .font(fonts.uiMedium)
+                .foregroundStyle(paperTheme.inkColor)
+
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            paperTheme.surfaceColor.opacity(0.55),
+            in: RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+                .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+        )
+    }
+
+    private var statusDotColor: Color {
+        switch appState.status {
+        case .idle: return paperTheme.successColor
+        case .recording: return PaperTokens.recordingRed
+        case .transcribing, .cleaning: return paperTheme.clipboardWarningColor
+        case .error: return paperTheme.errorColor
         }
     }
 
-    private var heroTitleBlock: some View {
-        HStack(spacing: 12) {
-            PaperSectionTile(
-                systemImage: "waveform",
-                tint: PaperTokens.dictationBlue,
-                size: 36,
-                iconSize: 16
-            )
+    private var statusText: String {
+        switch appState.status {
+        case .idle: return "Готов. Работает в любом приложении."
+        case .recording: return "Идёт запись…"
+        case .transcribing: return "Распознаю речь…"
+        case .cleaning: return "Привожу текст в порядок…"
+        case .error: return "Ошибка диктовки."
+        }
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(paperTheme.errorColor)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Говорите, не печатайте")
-                    .font(fonts.heroTitle)
-                    .tracking(-0.45)
+                Text(message)
+                    .font(fonts.uiMedium)
                     .foregroundStyle(paperTheme.inkColor)
-                Text(hotkeyHintText)
+                Text("Если текст распознался ранее, он сохранён в истории и буфере.")
                     .font(fonts.caption)
                     .foregroundStyle(paperTheme.secondaryInkColor)
             }
-        }
-    }
 
-    private var hotkeyHintText: String {
-        switch settings.shortcutMode {
-        case .holdOrDoubleTap:
-            return "Диктовка: удерживайте \(settings.shortcutDisplayLabel) или нажмите дважды · Esc отменяет"
-        case .toggle:
-            return "Диктовка: нажмите \(settings.shortcutDisplayLabel) для старта и ещё раз для вставки · Esc отменяет"
-        case .hold:
-            return "Диктовка: удерживайте \(settings.shortcutDisplayLabel), говорите и отпустите · Esc отменяет"
-        }
-    }
+            Spacer(minLength: 8)
 
-    private var statusPill: some View {
-        HStack(spacing: 6) {
-            statusIcon
-            Text(statusTitle)
-                .font(ClaudeFonts.smallMedium)
-                .lineLimit(1)
-                .foregroundStyle(theme.ink)
-        }
-        .fixedSize()
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(theme.surface, in: Capsule())
-        .overlay(Capsule().strokeBorder(theme.border, lineWidth: 1))
-    }
-
-    // MARK: - Claude Composer Card
-
-    private var claudeComposerCard: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            if appState.activeMeetingID != nil {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        activeRecordingInfo
-                        Spacer()
-                        activeRecordingControls
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        activeRecordingInfo
-                        activeRecordingControls
-                    }
-                }
-                .padding(.vertical, 4)
-            } else {
-                TextField("О чём будет встреча? (необязательно — можно оставить пустым)", text: $quickMeetingTitle)
-                    .font(ClaudeFonts.body)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(theme.ink)
-                    .onSubmit {
-                        startQuickMeeting(template: selectedTemplate)
-                    }
-
-                // Bottom toolbar inside composer
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        composerPickers
-                        Spacer(minLength: 8)
-                        startMeetingButton
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        composerPickers
-                        HStack {
-                            Spacer()
-                            startMeetingButton
-                        }
-                    }
-                }
+            Button("Настройки") {
+                appState.selectedSection = .settings
             }
+            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
         }
-        .padding(15)
-        .background(theme.surface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(theme.border, lineWidth: 1)
+        .padding(14)
+        .background(
+            paperTheme.errorColor.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
         )
-        .shadow(color: theme.cardShadow, radius: 12, y: 4)
+        .overlay(
+            RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                .strokeBorder(paperTheme.errorColor.opacity(0.28), lineWidth: PaperTokens.hairline)
+        )
     }
 
-    private var activeRecordingInfo: some View {
-        HStack(spacing: 11) {
-            ClaudeIcon(name: "waveform", size: 17, weight: .regular)
-                .symbolEffect(.variableColor.iterative, isActive: true)
-                .foregroundStyle(theme.danger)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Сейчас идёт запись встречи")
-                    .font(ClaudeFonts.uiSemibold)
-                    .foregroundStyle(theme.ink)
-                Text("Время записи: \(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))")
-                    .font(ClaudeFonts.small.monospacedDigit())
-                    .foregroundStyle(theme.secondaryInk)
+    // MARK: - Hotkey Card (L2 keycap)
+
+    private var hotkeyCard: some View {
+        HStack(alignment: .center, spacing: 18) {
+            VStack(spacing: 4) {
+                Text(settings.shortcutKey.symbol)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(paperTheme.inkColor)
+                Text(settings.shortcutDisplayLabel)
+                    .font(fonts.captionMedium)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .frame(minWidth: 112)
+            .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.controlRadius)
+            .accessibilityLabel("Клавиша диктовки: \(settings.shortcutDisplayLabel)")
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(settings.shortcutMode.rawValue)
+                    .font(fonts.bodyMedium)
+                    .foregroundStyle(paperTheme.inkColor)
+
+                Text(settings.shortcutMode.descriptionText)
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Текст появится там, где стоит курсор. Escape отменяет запись.")
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.tertiaryInkColor)
+            }
+
+            Spacer(minLength: 0)
         }
+        .padding(16)
+        .background(
+            paperTheme.surfaceColor.opacity(0.5),
+            in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+                .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+        )
     }
 
-    private var activeRecordingControls: some View {
-        ClaudeFlowLayout(horizontalSpacing: 8, verticalSpacing: 6) {
-            Button("Открыть блокнот") {
-                appState.selectedMeetingID = appState.activeMeetingID
-                appState.selectedSection = .meetings
+    // MARK: - Last Dictation
+
+    private func lastDictationSection(_ record: TranscriptionRecord) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("Последняя диктовка")
+                    .font(fonts.sectionTitle)
+                    .foregroundStyle(paperTheme.inkColor)
+
+                Spacer()
+
+                Text(lastMetaString(for: record))
+                    .font(fonts.caption)
+                    .foregroundStyle(statusMetaColor(for: record.status))
+                    .lineLimit(1)
             }
-            .buttonStyle(ClaudeSecondaryButtonStyle())
 
-            Button("Завершить и создать рекап") {
-                appState.finishMeeting()
-                appState.selectedSection = .meetings
-            }
-            .buttonStyle(ClaudePrimaryButtonStyle(tintColor: theme.danger))
-        }
-    }
-
-    private var composerPickers: some View {
-        ClaudeFlowLayout(horizontalSpacing: 7, verticalSpacing: 6) {
-            Menu {
-                ForEach(MeetingTemplate.allCases) { tpl in
-                    Button {
-                        selectedTemplate = tpl
-                    } label: {
-                        Label(tpl.rawValue, systemImage: tpl.systemImage)
-                    }
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    ClaudeIcon(name: selectedTemplate.systemImage, size: 11.5, weight: .light)
-                        .foregroundStyle(theme.secondaryInk)
-                    Text(selectedTemplate.rawValue)
-                        .font(ClaudeFonts.smallMedium)
-                        .lineLimit(1)
-                    ClaudeIcon(name: "chevron.down", size: 8.5, weight: .regular)
-                        .foregroundStyle(theme.secondaryInk)
-                }
-                .foregroundStyle(theme.ink)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-
-            Menu {
-                ForEach(MeetingAudioSource.allCases) { source in
-                    Button {
-                        settings.meetingAudioSource = source
-                    } label: {
-                        Text(source.rawValue)
-                    }
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    ClaudeIcon(name: settings.meetingAudioSource == .micAndSystem ? "speaker.wave.2" : "mic", size: 11.5, weight: .light)
-                        .foregroundStyle(theme.secondaryInk)
-                    Text(settings.meetingAudioSource.rawValue)
-                        .font(ClaudeFonts.smallMedium)
-                        .lineLimit(1)
-                    ClaudeIcon(name: "chevron.down", size: 8.5, weight: .regular)
-                        .foregroundStyle(theme.secondaryInk)
-                }
-                .foregroundStyle(theme.ink)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-        }
-    }
-
-    private var startMeetingButton: some View {
-        Button {
-            startQuickMeeting(template: selectedTemplate)
-        } label: {
-            HStack(spacing: 5.5) {
-                ClaudeIcon(name: "record.circle", size: 12, weight: .regular)
-                Text("Начать встречу")
-            }
-        }
-        .buttonStyle(ClaudePrimaryButtonStyle())
-    }
-
-    private var templateChipsRow: some View {
-        ClaudeFlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
-            ForEach(MeetingTemplate.allCases) { tpl in
-                Button {
-                    selectedTemplate = tpl
-                    startQuickMeeting(template: tpl)
-                } label: {
-                    HStack(spacing: 5) {
-                        ClaudeIcon(name: tpl.systemImage, size: 11, weight: .light)
-                            .foregroundStyle(theme.secondaryInk)
-                        Text(tpl.rawValue)
-                            .font(ClaudeFonts.small)
-                            .lineLimit(1)
-                            .foregroundStyle(theme.secondaryInk)
-                    }
-                    .fixedSize()
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(theme.surface, in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func startQuickMeeting(template: MeetingTemplate) {
-        let title = quickMeetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        quickMeetingTitle = ""
-        if let id = appState.startMeeting(
-            title: title,
-            template: template,
-            audioSource: settings.meetingAudioSource
-        ) {
-            appState.selectedMeetingID = id
-            appState.selectedSection = .meetings
-        }
-    }
-
-    // MARK: - Permissions
-
-    private var showsPermissionCard: Bool {
-        !appState.hotkeyActive
-            || !appState.microphoneAuthorized
-            || (settings.autoPaste && !appState.accessibilityAuthorized)
-            || (settings.meetingAudioSource == .micAndSystem && !appState.screenCaptureAuthorized)
-    }
-
-    private var permissionBanner: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if !appState.hotkeyActive {
-                permissionRow(systemImage: "keyboard") {
-                    if appState.inputMonitoringAuthorized {
-                        Text("Мониторинг ввода разрешён, нужен перезапуск приложения.")
-                        Spacer(minLength: 8)
-                        Button("Перезапустить") { PermissionsHelper.relaunchApp() }
-                            .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+            PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 12, verticalPadding: 10) {
+                Group {
+                    if record.text.isEmpty {
+                        Text(record.errorMessage ?? "Не удалось распознать речь")
+                            .font(fonts.body)
+                            .italic()
+                            .foregroundStyle(paperTheme.secondaryInkColor)
                     } else {
-                        Text("Мониторинг ввода не разрешён — хоткей не работает вне окна.")
-                        Spacer(minLength: 8)
-                        Button("Разрешить") { PermissionsHelper.openInputMonitoringSettings() }
-                            .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+                        Text(record.text)
+                            .font(fonts.body)
+                            .lineSpacing(3)
+                            .foregroundStyle(paperTheme.inkColor)
+                            .textSelection(.enabled)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if !appState.microphoneAuthorized {
-                if !appState.hotkeyActive { Divider().overlay(theme.border) }
-                permissionRow(systemImage: "mic.slash") {
-                    Text("Доступ к микрофону не разрешён — запись невозможна.")
-                    Spacer(minLength: 8)
-                    Button("Разрешить") { PermissionsHelper.openMicrophoneSettings() }
-                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
-                }
-            }
-
-            if settings.autoPaste && !appState.accessibilityAuthorized {
-                if !appState.hotkeyActive || !appState.microphoneAuthorized { Divider().overlay(theme.border) }
-                permissionRow(systemImage: "hand.raised") {
-                    Text("Accessibility не разрешён — автовставка (Cmd+V) не сработает.")
-                    Spacer(minLength: 8)
-                    Button("Разрешить") { PermissionsHelper.openAccessibilitySettings() }
-                        .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
-                }
-            }
-
-            if settings.meetingAudioSource == .micAndSystem && !appState.screenCaptureAuthorized {
-                if !appState.hotkeyActive || !appState.microphoneAuthorized || (settings.autoPaste && !appState.accessibilityAuthorized) {
-                    Divider().overlay(theme.border)
-                }
-                permissionRow(systemImage: "speaker.wave.2") {
-                    Text("Системный звук не разрешён — во встречах запишется только ваш микрофон.")
-                    Spacer(minLength: 8)
-                    Button("Разрешить") { PermissionsHelper.openScreenCaptureSettings() }
-                        .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
-                    Button("Перезапустить") { PermissionsHelper.relaunchApp() }
-                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
-                }
-            }
-        }
-        .padding(11)
-        .background(theme.warning.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .strokeBorder(theme.warning.opacity(0.25))
-        )
-    }
-
-    private func permissionRow<Content: View>(
-        systemImage: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(spacing: 10) {
-            ClaudeIcon(name: systemImage, size: 12.5, weight: .light)
-                .foregroundStyle(theme.warning)
-                .frame(width: 16)
-            content()
-                .font(ClaudeFonts.small)
-                .foregroundStyle(theme.ink)
-        }
-    }
-
-    // MARK: - Stats & Last Transcript
-
-    private var statsStrip: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 135), spacing: 10)], spacing: 10) {
-            statPill(title: "Расшифровок", value: "\(history.records.count)")
-            statPill(title: "Слов надиктовано", value: "\(totalWords)")
-            if let wpm = averageWordsPerMinute {
-                statPill(title: "Скорость", value: "\(wpm) сл/мин")
-            }
-            statPill(title: "Активных дней", value: "\(activeDaysCount)")
-        }
-    }
-
-    private func statPill(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(ClaudeFonts.statNumber.monospacedDigit())
-                .tracking(-0.3)
-                .foregroundStyle(theme.ink)
-            Text(title)
-                .font(ClaudeFonts.small)
-                .foregroundStyle(theme.secondaryInk)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .claudeCard(theme, cornerRadius: 11, padding: 12)
-    }
-
-    @ViewBuilder
-    private var lastTranscriptSection: some View {
-        if let last = history.records.first {
-            VStack(alignment: .leading, spacing: 9) {
+            if !record.text.isEmpty {
                 HStack(spacing: 8) {
-                    Text("Последняя диктовка")
-                        .font(ClaudeFonts.uiMedium)
-                        .foregroundStyle(theme.ink)
-
-                    if let lang = last.languageSummary, !lang.isEmpty {
-                        Text(lang)
-                            .font(ClaudeFonts.microMedium)
-                            .foregroundStyle(theme.accentInk)
-                            .lineLimit(1)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(theme.accentSoft, in: Capsule())
-                    }
-
-                    if let engine = last.engine, !engine.isEmpty {
-                        let label = last.formattedLatency.map { "\(engine) · \($0)" } ?? engine
-                        Text(label)
-                            .font(ClaudeFonts.microMedium.monospacedDigit())
-                            .foregroundStyle(theme.secondaryInk)
-                            .lineLimit(1)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(theme.surfaceSubtle, in: Capsule())
-                    }
-
-                    Spacer()
-
-                    Text(last.date, format: .dateTime.day().month().hour().minute())
-                        .font(ClaudeFonts.small)
-                        .foregroundStyle(theme.secondaryInk)
-                        .lineLimit(1)
-
                     Button {
-                        TextInjector.copyToClipboard(last.text)
+                        TextInjector.copyToClipboard(record.text)
                         copiedLast = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             copiedLast = false
                         }
                     } label: {
-                        HStack(spacing: 4) {
-                            ClaudeIcon(name: copiedLast ? "checkmark" : "doc.on.doc", size: 11, weight: .light)
+                        HStack(spacing: 5) {
+                            Image(systemName: copiedLast ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 11, weight: .regular))
                             Text(copiedLast ? "Скопировано" : "Копировать")
                         }
                     }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
-                }
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
 
-                Text(last.text)
-                    .font(ClaudeFonts.body)
-                    .lineSpacing(3)
-                    .foregroundStyle(theme.ink)
-                    .textSelection(.enabled)
-                    .lineLimit(5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack {
                     Button {
-                        appState.selectedSection = .history
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text("Вся история")
-                            ClaudeIcon(name: "arrow.right", size: 10, weight: .light)
+                        _ = appState.insertTextAgain(record.text)
+                        reinsertedFeedback = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            reinsertedFeedback = false
                         }
-                        .font(ClaudeFonts.smallMedium)
-                        .foregroundStyle(theme.accent)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: reinsertedFeedback ? "checkmark" : "arrow.turn.down.left")
+                                .font(.system(size: 11, weight: .regular))
+                            Text(reinsertedFeedback ? "Отправлено" : "Вставить снова")
+                        }
+                    }
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+
+                    Spacer()
+
+                    Button("Вся история") {
+                        appState.selectedSection = .history
                     }
                     .buttonStyle(.plain)
-                    Spacer()
+                    .font(fonts.captionMedium)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
                 }
             }
-            .claudeCard(theme, cornerRadius: 12, padding: 14)
         }
     }
 
-    @ViewBuilder
-    private var statusIcon: some View {
-        switch appState.status {
-        case .idle:
-            ClaudeIcon(name: "mic", size: 11.5, weight: .light).foregroundStyle(theme.accent)
-        case .recording:
-            ClaudeIcon(name: "waveform", size: 11.5, weight: .regular)
-                .symbolEffect(.variableColor.iterative, isActive: true)
-                .foregroundStyle(theme.danger)
-        case .transcribing, .cleaning:
-            ClaudeIcon(name: "waveform", size: 11.5, weight: .regular)
-                .symbolEffect(.pulse, isActive: true)
-                .foregroundStyle(theme.accent)
-        case .error:
-            ClaudeIcon(name: "exclamationmark.triangle", size: 11.5, weight: .light).foregroundStyle(theme.warning)
+    private func lastMetaString(for record: TranscriptionRecord) -> String {
+        let timeStr = record.date.formatted(.dateTime.hour().minute())
+        switch record.status {
+        case .inserted:
+            if let app = record.targetApp, !app.isEmpty {
+                return "Вставлено в \(app) · \(timeStr)"
+            }
+            return "Вставлено · \(timeStr)"
+        case .clipboardOnly:
+            if let app = record.targetApp, !app.isEmpty {
+                return "В буфере (\(app)) · \(timeStr)"
+            }
+            return "В буфере · \(timeStr)"
+        case .failed:
+            return "Ошибка · \(timeStr)"
         }
     }
 
-    private var statusTitle: String {
-        switch appState.status {
-        case .idle: return "Готов слушать"
-        case .recording: return "Идёт запись…"
-        case .transcribing: return "Распознаю речь…"
-        case .cleaning: return "Обрабатываю текст…"
-        case .error: return "Ошибка"
+    private func statusMetaColor(for status: InsertStatus) -> Color {
+        switch status {
+        case .inserted: return paperTheme.successColor
+        case .clipboardOnly: return paperTheme.clipboardWarningColor
+        case .failed: return paperTheme.errorColor
         }
     }
 
-    private var totalWords: Int {
-        history.records.reduce(0) { $0 + $1.wordCount }
+    // MARK: - Cleanup Style (4 Capsules)
+
+    private var cleanupStyleSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Обработка текста")
+                .font(fonts.sectionTitle)
+                .foregroundStyle(paperTheme.inkColor)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(CleanupStyle.allCases) { style in
+                        let isSelected = settings.cleanupStyle == style
+                        Button {
+                            settings.cleanupStyle = style
+                        } label: {
+                            Text(style.shortTitle)
+                        }
+                        .buttonStyle(
+                            PaperButtonStyle(
+                                role: isSelected ? .primary : .secondary,
+                                compact: true,
+                                isCapsule: true
+                            )
+                        )
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    }
+                }
+            }
+
+            Text(settings.cleanupStyle.oneLineDescription)
+                .font(fonts.caption)
+                .foregroundStyle(paperTheme.inkColor)
+
+            Text("Текст отправляется в Anthropic API. Без ключа текст вставляется как распознан.")
+                .font(fonts.caption)
+                .foregroundStyle(paperTheme.secondaryInkColor)
+        }
     }
 
-    private var averageWordsPerMinute: Int? {
-        let timed = history.records.filter { $0.durationSeconds > 1 }
-        guard !timed.isEmpty else { return nil }
-        let totalMinutes = timed.reduce(0.0) { $0 + $1.durationSeconds } / 60
-        guard totalMinutes > 0 else { return nil }
-        let words = timed.reduce(0) { $0 + $1.wordCount }
-        return Int((Double(words) / totalMinutes).rounded())
-    }
+    // MARK: - Quiet Weekly Stat Line
 
-    private var activeDaysCount: Int {
-        let calendar = Calendar.current
-        let days = Set(history.records.map { calendar.startOfDay(for: $0.date) })
-        return days.count
+    private var weeklyStatsLine: some View {
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let recent = history.records.filter { $0.date >= weekAgo && !$0.text.isEmpty }
+        let words = recent.reduce(0) { $0 + $1.wordCount }
+        let timed = recent.filter { $0.durationSeconds > 1 }
+        let totalMinutes = timed.reduce(0.0) { $0 + $1.durationSeconds } / 60.0
+        let wpmText: String = {
+            guard totalMinutes > 0 else { return "" }
+            let timedWords = timed.reduce(0) { $0 + $1.wordCount }
+            let wpm = Int((Double(timedWords) / totalMinutes).rounded())
+            return " · \(wpm) сл/мин"
+        }()
+
+        return HStack(spacing: 6) {
+            if words > 0 {
+                Text("За неделю: \(words) слов\(wpmText)")
+            } else {
+                Text("За неделю диктовок ещё не было.")
+            }
+        }
+        .font(fonts.caption)
+        .foregroundStyle(paperTheme.tertiaryInkColor)
+        .padding(.top, 4)
     }
 }

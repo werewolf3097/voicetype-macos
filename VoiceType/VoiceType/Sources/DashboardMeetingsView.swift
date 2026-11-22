@@ -67,7 +67,7 @@ struct DashboardMeetingsView: View {
 
             detailPane
                 .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
-                .background(theme.canvas)
+                .background { PaperBackground() }
         }
         .onAppear {
             if appState.selectedMeetingID == nil {
@@ -243,7 +243,7 @@ struct DashboardMeetingsView: View {
                 }
             }
         }
-        .background(theme.canvas)
+        .background { PaperBackground() }
     }
 
     private func meetingRow(_ meeting: MeetingRecord) -> some View {
