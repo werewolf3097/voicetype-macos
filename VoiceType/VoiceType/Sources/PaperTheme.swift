@@ -235,7 +235,7 @@ enum PaperTokens {
     static let cardRadius: CGFloat = 12
     static let grid: CGFloat = 4
     static let contentPadding: CGFloat = 34
-    static let hairline: CGFloat = 0.5
+    static let hairline: CGFloat = 1.0
 
     // Section tile accents (section 4.1)
     static let dictationBlue = Color(red: 0.204, green: 0.471, blue: 0.965)   // #3478F6
@@ -398,7 +398,7 @@ struct PaperTheme: Identifiable, Equatable {
     }
 
     var borderColor: Color {
-        isDark ? Color.white.opacity(0.16) : shadowRGB.color.opacity(0.18)
+        isDark ? Color.white.opacity(0.16) : shadowRGB.color.opacity(0.15)
     }
 
     var subtleHighlightColor: Color {

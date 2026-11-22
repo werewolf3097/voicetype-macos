@@ -31,7 +31,6 @@ struct DashboardSettingsView: View {
     @State private var showLLMKeyHelp = false
     @State private var showLLMModelHelp = false
     @State private var showAdvanced = false
-    @State private var proUpsellTheme: PaperTheme? = nil
     @State private var inputDevices: [AudioInputDevice] = []
 
     private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
@@ -98,9 +97,6 @@ struct DashboardSettingsView: View {
         .onChange(of: meetingsStore.meetings) { _, _ in
             refreshAudioStats()
             refreshInputDevices()
-        }
-        .sheet(item: $proUpsellTheme) { lockedTheme in
-            proPaperSheet(lockedTheme)
         }
     }
 
@@ -346,78 +342,21 @@ struct DashboardSettingsView: View {
 
     private var appearanceGroup: some View {
         PaperSettingGroup("Внешний вид") {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Бумага и текстура")
-                        .font(fonts.uiMedium)
-                        .foregroundStyle(paperTheme.inkColor)
-                    Text("Все 9 бумаг открыты сразу для тестирования.")
-                        .font(fonts.caption)
-                        .foregroundStyle(paperTheme.secondaryInkColor)
-                }
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
-                    ForEach(PaperTheme.allThemes) { candidate in
-                        paperCard(candidate)
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            hairlineDivider
-
             PaperSettingRow(
-                "Глубина кнопок",
-                caption: "Масштаб теней и объёма элементов управления.",
-                systemImage: "square.stack.3d.up",
-                tileTint: PaperTokens.settingsSlate
-            ) {
-                HStack(spacing: 8) {
-                    Slider(value: $settings.paperDepth, in: 0...1, step: 0.05)
-                        .frame(width: 160)
-                    Text("\(Int((settings.paperDepth * 100).rounded()))%")
-                        .font(fonts.caption.monospacedDigit())
-                        .foregroundStyle(paperTheme.secondaryInkColor)
-                        .frame(width: 36, alignment: .trailing)
-                }
-            }
-
-            hairlineDivider
-
-            PaperSettingRow(
-                "Зерно бумаги",
-                caption: "Интенсивность процедурной фактуры листа.",
-                systemImage: "sparkles.rectangle.stack",
-                tileTint: PaperTokens.settingsSlate
-            ) {
-                HStack(spacing: 8) {
-                    Slider(value: $settings.paperGrainIntensity, in: 0...1, step: 0.05)
-                        .frame(width: 160)
-                    Text("\(Int((settings.paperGrainIntensity * 100).rounded()))%")
-                        .font(fonts.caption.monospacedDigit())
-                        .foregroundStyle(paperTheme.secondaryInkColor)
-                        .frame(width: 36, alignment: .trailing)
-                }
-            }
-
-            hairlineDivider
-
-            PaperSettingRow(
-                "Следовать системной теме",
-                caption: "При тёмной теме macOS автоматически используется бумага «Графит».",
+                "Тема оформления",
+                caption: "Светлая, тёмная или автоматическое переключение вместе с macOS.",
                 systemImage: "circle.lefthalf.filled",
                 tileTint: PaperTokens.settingsSlate
             ) {
-                Toggle(
-                    "",
-                    isOn: Binding(
-                        get: { settings.appearance == .system },
-                        set: { settings.appearance = $0 ? .system : .light }
-                    )
+                PaperSegmentedControl(
+                    options: [
+                        .init(id: .system, title: "Системная"),
+                        .init(id: .light, title: "Светлая"),
+                        .init(id: .dark, title: "Тёмная")
+                    ],
+                    selection: $settings.appearance,
+                    compact: true
                 )
-                .labelsHidden()
-                .toggleStyle(PaperToggleStyle())
             }
 
             hairlineDivider
@@ -450,113 +389,6 @@ struct DashboardSettingsView: View {
                     .toggleStyle(PaperToggleStyle())
             }
         }
-    }
-
-    private func paperCard(_ candidate: PaperTheme) -> some View {
-        let isSelected = settings.paperThemeID == candidate.id
-
-        return Button {
-            settings.paperThemeID = candidate.id
-            if candidate.isDark {
-                settings.appearance = .dark
-            } else if settings.appearance == .dark {
-                settings.appearance = .light
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                ZStack(alignment: .topTrailing) {
-                    RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
-                        .fill(candidate.baseColor)
-                        .frame(height: 44)
-                        .overlay(
-                            Text("Аа")
-                                .font(.system(size: 16, weight: .medium, design: .serif))
-                                .foregroundStyle(candidate.inkColor)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
-                                .strokeBorder(candidate.borderColor, lineWidth: PaperTokens.hairline)
-                        )
-
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(candidate.isDark ? Color.white : PaperTokens.dictationBlue)
-                            .padding(5)
-                    }
-                }
-
-                Text(candidate.name)
-                    .font(fonts.captionMedium)
-                    .foregroundStyle(paperTheme.inkColor)
-                    .lineLimit(1)
-            }
-            .padding(7)
-            .background(
-                RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
-                    .fill(isSelected ? paperTheme.selectedSidebarColor : paperTheme.surfaceColor.opacity(0.75))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? paperTheme.inkColor.opacity(0.65) : paperTheme.borderColor,
-                        lineWidth: isSelected ? 1.25 : PaperTokens.hairline
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(candidate.name)
-    }
-
-    private func proPaperSheet(_ lockedTheme: PaperTheme) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
-                    .fill(lockedTheme.baseColor)
-                    .frame(width: 48, height: 48)
-                    .overlay(
-                        Text("Аа")
-                            .font(.system(size: 20, weight: .medium, design: .serif))
-                            .foregroundStyle(lockedTheme.inkColor)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
-                            .strokeBorder(lockedTheme.borderColor, lineWidth: PaperTokens.hairline)
-                    )
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Доступно в Pro")
-                        .font(fonts.pageTitle)
-                        .foregroundStyle(paperTheme.inkColor)
-                    Text("Бумага «\(lockedTheme.name)» входит в набор фактурных бумаг.")
-                        .font(fonts.caption)
-                        .foregroundStyle(paperTheme.secondaryInkColor)
-                }
-            }
-
-            Text("В бесплатной версии доступны темы «Чистый лист» и «Хлопок». Оплата через App Store в этой сборке не подключена.")
-                .font(fonts.body)
-                .foregroundStyle(paperTheme.secondaryInkColor)
-                .fixedSize(horizontal: false, vertical: true)
-
-            #if DEBUG
-            Toggle("Режим разработчика: открыть Pro-бумаги", isOn: $entitlement.debugOverridePro)
-                .toggleStyle(PaperToggleStyle())
-                .font(fonts.ui)
-                .foregroundStyle(paperTheme.inkColor)
-            #endif
-
-            HStack {
-                Spacer()
-                Button("Закрыть") {
-                    proUpsellTheme = nil
-                }
-                .buttonStyle(PaperButtonStyle(role: .primary))
-            }
-        }
-        .padding(24)
-        .frame(width: 400)
-        .background { PaperBackground() }
     }
 
     private var apiKeysGroup: some View {
@@ -683,22 +515,43 @@ struct DashboardSettingsView: View {
 
                 PaperSettingRow(
                     "Модель",
-                    caption: modelsFetchError ?? "По умолчанию: \(settings.llmProvider.defaultModel). Выберите из списка или введите вручную.",
+                    caption: modelsFetchError ?? "По умолчанию (драфт): \(settings.llmProvider.defaultModel). Нажмите на поле, чтобы указать свою.",
                     systemImage: "cpu",
                     tileTint: PaperTokens.dictionaryTeal
                 ) {
                     HStack(spacing: 6) {
                         PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
-                            TextField(settings.llmProvider.defaultModel, text: currentLLMModelBinding)
-                                .textFieldStyle(.plain)
-                                .font(fonts.ui)
-                                .onChange(of: currentLLMModelBinding.wrappedValue) { _, _ in
-                                    llmCheckState = .idle
+                            HStack(spacing: 4) {
+                                TextField(settings.llmProvider.defaultModel, text: currentLLMModelBinding)
+                                    .textFieldStyle(.plain)
+                                    .font(fonts.ui)
+                                    .onChange(of: currentLLMModelBinding.wrappedValue) { _, _ in
+                                        llmCheckState = .idle
+                                    }
+
+                                if !currentLLMModelBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Button {
+                                        currentLLMModelBinding.wrappedValue = ""
+                                        llmCheckState = .idle
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(paperTheme.tertiaryInkColor)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Сбросить к модели по умолчанию")
+                                    .accessibilityLabel("Сбросить к модели по умолчанию")
                                 }
+                            }
                         }
-                        .frame(width: 148)
+                        .frame(width: 182)
 
                         Menu {
+                            Button("По умолчанию (\(settings.llmProvider.defaultModel))") {
+                                currentLLMModelBinding.wrappedValue = ""
+                                llmCheckState = .idle
+                            }
+
                             Section("Рекомендуемые") {
                                 ForEach(settings.llmProvider.recommendedModels, id: \.id) { item in
                                     Button {
@@ -712,7 +565,7 @@ struct DashboardSettingsView: View {
 
                             if let live = fetchedModels[settings.llmProvider], !live.isEmpty {
                                 Section("Доступные по вашему ключу (\(live.count))") {
-                                    ForEach(live.prefix(40), id: \.self) { modelID in
+                                    ForEach(live.prefix(80), id: \.self) { modelID in
                                         Button(modelID) {
                                             currentLLMModelBinding.wrappedValue = modelID
                                             llmCheckState = .idle
@@ -720,35 +573,32 @@ struct DashboardSettingsView: View {
                                     }
                                 }
                             }
+
+                            Divider()
+
+                            Button(fetchedModels[settings.llmProvider] == nil ? "Загрузить список с сервера" : "Обновить список с сервера") {
+                                refreshAvailableModels()
+                            }
+                            .disabled(isLoadingModels || !settings.isLLMConfigured)
                         } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundStyle(paperTheme.inkColor)
-                                .frame(width: 24, height: 24)
-                                .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.chipRadius)
+                            Group {
+                                if isLoadingModels {
+                                    ProgressView()
+                                        .controlSize(.mini)
+                                } else {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .foregroundStyle(paperTheme.inkColor)
+                                }
+                            }
+                            .frame(width: 24, height: 24)
+                            .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.chipRadius)
                         }
                         .menuStyle(.borderlessButton)
                         .menuIndicator(.hidden)
                         .fixedSize()
-                        .help("Выбрать модель из списка")
+                        .help("Выбрать или загрузить модель с сервера")
                         .accessibilityLabel("Выбрать модель из списка")
-
-                        Button {
-                            refreshAvailableModels()
-                        } label: {
-                            if isLoadingModels {
-                                ProgressView()
-                                    .controlSize(.mini)
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 10.5, weight: .medium))
-                            }
-                        }
-                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
-                        .disabled(isLoadingModels || !settings.isLLMConfigured)
-                        .help("Загрузить актуальный список моделей с сервера")
-                        .accessibilityLabel("Обновить список моделей")
 
                         helpPopoverButton(
                             isPresented: $showLLMModelHelp,

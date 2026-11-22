@@ -91,7 +91,7 @@ enum LLMProviderKind: String, CaseIterable, Identifiable, Codable, Sendable {
         case .openai:
             return "Для быстрой очистки речи лучше подходят мини-модели вроде gpt-5-mini или gpt-4.1-mini."
         case .gemini:
-            return "Модели серии Flash работают быстрее всего. Если модель устарела, обновите список кнопкой справа от поля."
+            return "Модели серии Flash и Hydrogen работают быстрее всего. Введите ID вручную или выберите актуальную модель в списке справа от поля."
         case .openaiCompatible:
             return "Имя модели зависит от провайдера: у OpenRouter формат «vendor/model», у Groq и Ollama — короткое имя модели."
         }
@@ -257,7 +257,7 @@ struct LLMPostProcessor: Sendable {
         let output = try await complete(
             systemPrompt: systemPrompt,
             userPrompt: userContent,
-            maxTokens: 4096,
+            maxTokens: 8192,
             timeout: 45
         )
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -269,7 +269,7 @@ struct LLMPostProcessor: Sendable {
         let fullText = try await complete(
             systemPrompt: prompts.system,
             userPrompt: prompts.user,
-            maxTokens: 4096,
+            maxTokens: 8192,
             timeout: 90
         ).trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -281,11 +281,13 @@ struct LLMPostProcessor: Sendable {
 
     func testConnection() async throws -> Int {
         let started = CFAbsoluteTimeGetCurrent()
+        // Thinking-модели (Gemini 3/4, GPT-5, o-series) расходуют лимит и на внутреннее размышление:
+        // слишком маленький maxTokens (например, 16) приводит к пустому текстовому ответу.
         let reply = try await complete(
             systemPrompt: "Отвечай предельно кратко.",
             userPrompt: "Ответь одним словом: ОК",
-            maxTokens: 16,
-            timeout: 15
+            maxTokens: 1024,
+            timeout: 20
         )
         guard !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw LLMError.emptyResponse
@@ -294,6 +296,30 @@ struct LLMPostProcessor: Sendable {
     }
 
     func fetchAvailableModels() async throws -> [String] {
+        if config.provider == .gemini {
+            var aggregated: [String] = []
+            var nextPageToken: String?
+            for _ in 0..<4 {
+                let request = try buildModelsListRequest(pageToken: nextPageToken)
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse else {
+                    throw LLMError.emptyResponse
+                }
+                guard (200..<300).contains(http.statusCode) else {
+                    let msg = Self.extractErrorMessage(from: data) ?? "HTTP \(http.statusCode)"
+                    throw LLMError.httpError(statusCode: http.statusCode, message: msg)
+                }
+                let page = try parseGeminiModelsPage(data: data)
+                aggregated.append(contentsOf: page.ids)
+                if let token = page.nextPageToken, !token.isEmpty {
+                    nextPageToken = token
+                } else {
+                    break
+                }
+            }
+            return Self.sortGeminiModels(Self.deduplicatePreservingOrder(aggregated))
+        }
+
         let request = try buildModelsListRequest()
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -306,13 +332,13 @@ struct LLMPostProcessor: Sendable {
         return try parseAvailableModels(data: data)
     }
 
-    func buildModelsListRequest(timeout: TimeInterval = 15) throws -> URLRequest {
+    func buildModelsListRequest(timeout: TimeInterval = 15, pageToken: String? = nil) throws -> URLRequest {
         switch config.provider {
         case .anthropic:
             guard !config.trimmedKey.isEmpty else {
                 throw LLMError.invalidConfiguration("Не задан Anthropic API key.")
             }
-            var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/models")!)
+            var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/models?limit=100")!)
             req.httpMethod = "GET"
             req.timeoutInterval = timeout
             req.setValue(config.trimmedKey, forHTTPHeaderField: "x-api-key")
@@ -333,7 +359,13 @@ struct LLMPostProcessor: Sendable {
             guard !config.trimmedKey.isEmpty else {
                 throw LLMError.invalidConfiguration("Не задан Google Gemini API key.")
             }
-            var req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=100")!)
+            var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models")!
+            var queryItems = [URLQueryItem(name: "pageSize", value: "100")]
+            if let pageToken, !pageToken.isEmpty {
+                queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+            }
+            components.queryItems = queryItems
+            var req = URLRequest(url: components.url!)
             req.httpMethod = "GET"
             req.timeoutInterval = timeout
             req.setValue(config.trimmedKey, forHTTPHeaderField: "x-goog-api-key")
@@ -355,33 +387,27 @@ struct LLMPostProcessor: Sendable {
     func parseAvailableModels(data: Data) throws -> [String] {
         switch config.provider {
         case .gemini:
-            struct GeminiModelsList: Decodable {
-                struct Item: Decodable {
-                    let name: String
-                    let supportedGenerationMethods: [String]?
-                }
-                let models: [Item]?
-            }
-            let decoded = try JSONDecoder().decode(GeminiModelsList.self, from: data)
-            let ids = (decoded.models ?? [])
-                .filter { item in
-                    guard let methods = item.supportedGenerationMethods else { return true }
-                    return methods.contains("generateContent")
-                }
-                .map { item in
-                    item.name.hasPrefix("models/") ? String(item.name.dropFirst(7)) : item.name
-                }
-                .filter { !$0.isEmpty }
-            return Array(NSOrderedSet(array: ids)) as? [String] ?? ids
+            let page = try parseGeminiModelsPage(data: data)
+            return Self.sortGeminiModels(Self.deduplicatePreservingOrder(page.ids))
 
-        case .anthropic, .openaiCompatible:
-            struct OpenAIModelsList: Decodable {
+        case .anthropic:
+            struct AnthropicModelsList: Decodable {
                 struct Item: Decodable { let id: String }
                 let data: [Item]?
             }
-            let decoded = try JSONDecoder().decode(OpenAIModelsList.self, from: data)
-            let ids = (decoded.data ?? []).map(\.id).filter { !$0.isEmpty }
-            return Array(NSOrderedSet(array: ids)) as? [String] ?? ids
+            let decoded = try JSONDecoder().decode(AnthropicModelsList.self, from: data)
+            return Self.deduplicatePreservingOrder((decoded.data ?? []).map(\.id).filter { !$0.isEmpty })
+
+        case .openaiCompatible:
+            struct CompatibleModelsList: Decodable {
+                struct DataItem: Decodable { let id: String }
+                struct OllamaItem: Decodable { let name: String }
+                let data: [DataItem]?
+                let models: [OllamaItem]?
+            }
+            let decoded = try JSONDecoder().decode(CompatibleModelsList.self, from: data)
+            let raw = (decoded.data?.map(\.id) ?? []) + (decoded.models?.map(\.name) ?? [])
+            return Self.deduplicatePreservingOrder(raw.filter { !$0.isEmpty })
 
         case .openai:
             struct OpenAIModelsList: Decodable {
@@ -393,16 +419,89 @@ struct LLMPostProcessor: Sendable {
                 .map(\.id)
                 .filter { id in
                     let lower = id.lowercased()
-                    return (lower.hasPrefix("gpt-") || lower.hasPrefix("o1") || lower.hasPrefix("o3") || lower.hasPrefix("o4"))
-                        && !lower.contains("audio")
-                        && !lower.contains("realtime")
-                        && !lower.contains("transcribe")
-                        && !lower.contains("tts")
-                        && !lower.contains("image")
+                    let isChatPrefix = lower.hasPrefix("gpt-")
+                        || lower.hasPrefix("chatgpt-")
+                        || lower.hasPrefix("o1")
+                        || lower.hasPrefix("o3")
+                        || lower.hasPrefix("o4")
+                    let isNonText = lower.contains("audio")
+                        || lower.contains("realtime")
+                        || lower.contains("transcribe")
+                        || lower.contains("tts")
+                        || lower.contains("image")
+                        || lower.contains("search")
+                        || lower.contains("instruct")
+                        || lower.contains("moderation")
+                        || lower.contains("embedding")
+                    return isChatPrefix && !isNonText
                 }
-                .sorted()
-            return Array(NSOrderedSet(array: ids)) as? [String] ?? ids
+                .sorted(by: >)
+            return Self.deduplicatePreservingOrder(ids)
         }
+    }
+
+    private func parseGeminiModelsPage(data: Data) throws -> (ids: [String], nextPageToken: String?) {
+        struct GeminiModelsList: Decodable {
+            struct Item: Decodable {
+                let name: String
+                let supportedGenerationMethods: [String]?
+            }
+            let models: [Item]?
+            let nextPageToken: String?
+        }
+        let decoded = try JSONDecoder().decode(GeminiModelsList.self, from: data)
+        let ids = (decoded.models ?? [])
+            .filter { item in
+                guard let methods = item.supportedGenerationMethods else { return true }
+                return methods.contains("generateContent")
+            }
+            .map { item in
+                item.name.hasPrefix("models/") ? String(item.name.dropFirst(7)) : item.name
+            }
+            .filter { id in
+                let lower = id.lowercased()
+                guard !lower.isEmpty else { return false }
+                let excluded = ["imagen", "veo", "lyria", "embedding", "aqa", "robotics", "bisect", "-tts", "-image", "-audio", "computer-use"]
+                return !excluded.contains { lower.contains($0) }
+            }
+        return (ids, decoded.nextPageToken)
+    }
+
+    private static func sortGeminiModels(_ ids: [String]) -> [String] {
+        ids.sorted { lhs, rhs in
+            let lScore = geminiVersionRank(lhs)
+            let rScore = geminiVersionRank(rhs)
+            if lScore != rScore { return lScore > rScore }
+            return lhs > rhs
+        }
+    }
+
+    private static func geminiVersionRank(_ id: String) -> Int {
+        let lower = id.lowercased()
+        let familyBonus = lower.hasPrefix("gemini-") ? 1000 : 0
+        let cleaned = lower
+            .replacingOccurrences(of: "gemini-", with: "")
+            .replacingOccurrences(of: "gemma-", with: "")
+        let numberToken = cleaned.split(whereSeparator: { !$0.isNumber && $0 != "." }).first.map(String.init) ?? ""
+        let parts = numberToken.split(separator: ".").compactMap { Int($0) }
+        let major = parts.first ?? 0
+        let minor = parts.count > 1 ? parts[1] : 0
+        let previewPenalty = lower.contains("exp") || lower.contains("preview") ? -1 : 0
+        return familyBonus + major * 100 + minor * 10 + previewPenalty
+    }
+
+    private static func deduplicatePreservingOrder(_ items: [String]) -> [String] {
+        var seen = Set<String>()
+        return items.filter { seen.insert($0).inserted }
+    }
+
+    static func isOpenAIReasoningModel(_ model: String) -> Bool {
+        let lower = model.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return lower.hasPrefix("gpt-5")
+            || lower.hasPrefix("o1")
+            || lower.hasPrefix("o3")
+            || lower.hasPrefix("o4")
+            || lower.hasPrefix("codex")
     }
 
     func complete(
@@ -463,14 +562,15 @@ struct LLMPostProcessor: Sendable {
             req.timeoutInterval = timeout
             req.setValue("Bearer \(config.trimmedKey)", forHTTPHeaderField: "Authorization")
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            let body = OpenAIBody(
-                model: config.resolvedModel,
+            let model = config.resolvedModel
+            let body = OpenAIModernBody(
+                model: model,
                 messages: [
                     .init(role: "system", content: systemPrompt),
                     .init(role: "user", content: userPrompt)
                 ],
-                temperature: 0.2,
-                max_tokens: maxTokens
+                temperature: Self.isOpenAIReasoningModel(model) ? nil : 0.2,
+                max_completion_tokens: maxTokens
             )
             req.httpBody = try JSONEncoder().encode(body)
             return req
@@ -523,7 +623,10 @@ struct LLMPostProcessor: Sendable {
         switch config.provider {
         case .anthropic:
             let decoded = try JSONDecoder().decode(AnthropicResponse.self, from: data)
-            let text = decoded.content.compactMap(\.text).joined()
+            let text = decoded.content
+                .filter { $0.type == nil || $0.type == "text" }
+                .compactMap(\.text)
+                .joined()
             guard !text.isEmpty else { throw LLMError.emptyResponse }
             return text
 
@@ -535,9 +638,22 @@ struct LLMPostProcessor: Sendable {
 
         case .gemini:
             let decoded = try JSONDecoder().decode(GeminiResponse.self, from: data)
-            let text = decoded.candidates?.first?.content?.parts?.compactMap(\.text).joined() ?? ""
-            guard !text.isEmpty else { throw LLMError.emptyResponse }
-            return text
+            let candidate = decoded.candidates?.first
+            let parts = candidate?.content?.parts ?? []
+            let text = parts
+                .filter { $0.thought != true }
+                .compactMap(\.text)
+                .joined()
+            if !text.isEmpty {
+                return text
+            }
+            if let block = decoded.promptFeedback?.blockReason, !block.isEmpty {
+                throw LLMError.httpError(statusCode: 200, message: "Запрос заблокирован фильтром безопасности Gemini (\(block)).")
+            }
+            if candidate?.finishReason == "MAX_TOKENS" {
+                throw LLMError.httpError(statusCode: 200, message: "Модель исчерпала лимит токенов на размышление (MAX_TOKENS).")
+            }
+            throw LLMError.emptyResponse
         }
     }
 
@@ -571,7 +687,18 @@ struct LLMPostProcessor: Sendable {
 
     private struct AnthropicResponse: Decodable {
         let content: [Block]
-        struct Block: Decodable { let text: String? }
+        struct Block: Decodable {
+            let type: String?
+            let text: String?
+        }
+    }
+
+    private struct OpenAIModernBody: Encodable {
+        let model: String
+        let messages: [Message]
+        let temperature: Double?
+        let max_completion_tokens: Int
+        struct Message: Encodable { let role: String; let content: String }
     }
 
     private struct OpenAIBody: Encodable {
@@ -611,11 +738,19 @@ struct LLMPostProcessor: Sendable {
 
     private struct GeminiResponse: Decodable {
         let candidates: [Candidate]?
+        let promptFeedback: PromptFeedback?
+        struct PromptFeedback: Decodable {
+            let blockReason: String?
+        }
         struct Candidate: Decodable {
             let content: Content?
+            let finishReason: String?
             struct Content: Decodable {
                 let parts: [Part]?
-                struct Part: Decodable { let text: String? }
+                struct Part: Decodable {
+                    let text: String?
+                    let thought: Bool?
+                }
             }
         }
     }

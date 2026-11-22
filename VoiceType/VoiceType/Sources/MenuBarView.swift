@@ -108,7 +108,6 @@ struct MenuBarView: View {
         .frame(width: 280)
         .background(paperTheme.baseColor)
         .background(MenuBarWindowAccessor(box: windowBox))
-        .preferredColorScheme(settings.appearance.colorScheme)
         .onAppear { appState.refreshPermissionsAndHotkey() }
     }
 

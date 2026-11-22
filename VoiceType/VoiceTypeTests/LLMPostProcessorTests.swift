@@ -84,14 +84,46 @@ final class LLMPostProcessorTests: XCTestCase {
         XCTAssertEqual(store.activeLLMConfig.resolvedModel, "gemini-3.8-flash")
     }
 
-    func testMigratesDeprecatedGemini25FlashTo38Flash() throws {
+    func testMigratesDeprecatedGemini25FlashToDraftDefault() throws {
         let suiteName = "com.farrukh.voicetype.tests.llm.mig.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set("gemini-2.5-flash", forKey: "geminiModel")
         let store = SettingsStore(defaults: defaults, persistSecrets: false, syncDockIcon: false)
-        XCTAssertEqual(store.geminiModel, "gemini-3.8-flash")
+        XCTAssertEqual(store.geminiModel, "")
+        store.llmProvider = .gemini
+        XCTAssertEqual(store.activeLLMConfig.resolvedModel, "gemini-3.8-flash")
+    }
+
+    func testGeminiSkipsThoughtPartsAndOpenAIReasoningOmitsTemperature() throws {
+        let gemini = LLMPostProcessor(
+            config: LLMConfiguration(provider: .gemini, apiKey: "AIza-test", model: "gemini-4-hydrogen", customBaseURL: "")
+        )
+        let gemJSON = Data("""
+        {
+          "candidates": [{
+            "finishReason": "STOP",
+            "content": {
+              "parts": [
+                {"text": "internal reasoning", "thought": true},
+                {"text": "ОК"}
+              ]
+            }
+          }]
+        }
+        """.utf8)
+        XCTAssertEqual(try gemini.parseResponseText(data: gemJSON), "ОК")
+
+        let gpt5 = LLMPostProcessor(
+            config: LLMConfiguration(provider: .openai, apiKey: "sk-test", model: "gpt-5-mini", customBaseURL: "")
+        )
+        let req = try gpt5.buildRequest(systemPrompt: "sys", userPrompt: "usr", maxTokens: 1024)
+        let body = try XCTUnwrap(req.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["max_completion_tokens"] as? Int, 1024)
+        XCTAssertNil(json["max_tokens"])
+        XCTAssertNil(json["temperature"])
     }
 
     func testParseAvailableModelsForGeminiAnthropicAndOpenAI() throws {
@@ -101,12 +133,14 @@ final class LLMPostProcessorTests: XCTestCase {
         let gemJSON = Data("""
         {
           "models": [
-            {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-2.5-pro", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-4-hydrogen", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/imagen-4.0", "supportedGenerationMethods": ["generateContent"]},
             {"name": "models/text-embedding-004", "supportedGenerationMethods": ["embedContent"]}
           ]
         }
         """.utf8)
-        XCTAssertEqual(try gemini.parseAvailableModels(data: gemJSON), ["gemini-3.8-flash"])
+        XCTAssertEqual(try gemini.parseAvailableModels(data: gemJSON), ["gemini-4-hydrogen", "gemini-2.5-pro"])
 
         let anthropic = LLMPostProcessor(
             config: LLMConfiguration(provider: .anthropic, apiKey: "k", model: "", customBaseURL: "")
@@ -117,7 +151,7 @@ final class LLMPostProcessorTests: XCTestCase {
         let openai = LLMPostProcessor(
             config: LLMConfiguration(provider: .openai, apiKey: "k", model: "", customBaseURL: "")
         )
-        let oaiJSON = Data(#"{"data":[{"id":"gpt-5-mini"},{"id":"whisper-1"},{"id":"gpt-4o-realtime"}]}"#.utf8)
-        XCTAssertEqual(try openai.parseAvailableModels(data: oaiJSON), ["gpt-5-mini"])
+        let oaiJSON = Data(#"{"data":[{"id":"gpt-4o-mini"},{"id":"gpt-5-mini"},{"id":"whisper-1"},{"id":"gpt-4o-realtime"}]}"#.utf8)
+        XCTAssertEqual(try openai.parseAvailableModels(data: oaiJSON), ["gpt-5-mini", "gpt-4o-mini"])
     }
 }

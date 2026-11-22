@@ -36,18 +36,7 @@ private struct PaperSurfaceModifier: ViewModifier {
                     shape
                         .fill(theme.insetColor)
                         .overlay(
-                            shape
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [
-                                            theme.shadowRGB.color.opacity(theme.isDark ? 0.50 : 0.16 * (0.4 + 0.6 * scaledDepth)),
-                                            theme.borderColor
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    ),
-                                    lineWidth: 0.8
-                                )
+                            shape.strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
                         )
 
                 case .l2OnPaper:
@@ -56,28 +45,32 @@ private struct PaperSurfaceModifier: ViewModifier {
                             LinearGradient(
                                 colors: [
                                     theme.surfaceColor,
-                                    theme.surfaceColor.opacity(theme.isDark ? 0.92 : 0.86)
+                                    theme.surfaceColor.opacity(theme.isDark ? 0.92 : 0.88)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
                         .overlay(
-                            shape.strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
-                        )
-                        .overlay(alignment: .top) {
-                            shape
+                            RoundedRectangle(cornerRadius: max(0, cornerRadius - 1), style: .continuous)
                                 .strokeBorder(
                                     LinearGradient(
-                                        colors: [theme.subtleHighlightColor, Color.clear],
+                                        colors: [
+                                            theme.subtleHighlightColor.opacity(theme.isDark ? 0.55 : 0.45),
+                                            Color.clear
+                                        ],
                                         startPoint: .top,
                                         endPoint: .center
                                     ),
-                                    lineWidth: PaperTokens.hairline
+                                    lineWidth: 0.75
                                 )
-                        }
+                                .padding(1)
+                        )
+                        .overlay(
+                            shape.strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
+                        )
                         .shadow(
-                            color: theme.shadowRGB.color.opacity((theme.isDark ? 0.34 : 0.11) * scaledDepth),
+                            color: theme.shadowRGB.color.opacity((theme.isDark ? 0.34 : 0.10) * scaledDepth),
                             radius: 2.5 * scaledDepth + 0.5,
                             x: 0.6 * scaledDepth,
                             y: 1.5 * scaledDepth
@@ -645,16 +638,61 @@ struct PaperSettingRow<Control: View>: View {
 
 // MARK: - Paper Environment Applier
 
+final class SystemAppearanceObserver: ObservableObject {
+    static let shared = SystemAppearanceObserver()
+
+    @Published private(set) var isDark: Bool
+    private var appObservation: NSKeyValueObservation?
+    private var themeNotificationObserver: NSObjectProtocol?
+
+    private init() {
+        self.isDark = Self.currentSystemIsDark()
+        appObservation = NSApp?.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.refresh()
+            }
+        }
+        themeNotificationObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refresh()
+        }
+    }
+
+    deinit {
+        if let themeNotificationObserver {
+            DistributedNotificationCenter.default().removeObserver(themeNotificationObserver)
+        }
+    }
+
+    func refresh() {
+        let next = Self.currentSystemIsDark()
+        if isDark != next {
+            isDark = next
+        }
+    }
+
+    static func currentSystemIsDark() -> Bool {
+        if let app = NSApp {
+            return app.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        let style = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")
+        return style?.caseInsensitiveCompare("Dark") == .orderedSame
+    }
+}
+
 private struct PaperEnvironmentModifier: ViewModifier {
     @ObservedObject var settings: SettingsStore
-    @Environment(\.colorScheme) private var systemColorScheme
+    @ObservedObject private var systemAppearance = SystemAppearanceObserver.shared
 
     func body(content: Content) -> some View {
         let prefersDark: Bool = {
             switch settings.appearance {
             case .dark: return true
             case .light: return false
-            case .system: return systemColorScheme == .dark
+            case .system: return systemAppearance.isDark
             }
         }()
         let resolved = PaperTheme.resolved(
@@ -666,6 +704,7 @@ private struct PaperEnvironmentModifier: ViewModifier {
             .environment(\.paperDepth, settings.paperDepth)
             .environment(\.paperGrainIntensity, settings.paperGrainIntensity)
             .environment(\.paperFontPreset, settings.fontPreset)
+            .preferredColorScheme(resolved.isDark ? .dark : .light)
     }
 }
 

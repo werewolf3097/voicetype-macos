@@ -427,20 +427,27 @@ final class SettingsStore: ObservableObject {
         self.restoreClipboard = defaults.object(forKey: "restoreClipboard") as? Bool ?? true
         self.cleanupStyle = CleanupStyle(rawValue: defaults.string(forKey: "cleanupStyle") ?? "") ?? .grammar
         self.llmProvider = LLMProviderKind(rawValue: defaults.string(forKey: "llmProvider") ?? "") ?? .anthropic
-        self.anthropicModel = defaults.string(forKey: "anthropicModel") ?? LLMProviderKind.anthropic.defaultModel
-        self.openaiModel = defaults.string(forKey: "openaiModel") ?? LLMProviderKind.openai.defaultModel
-        let storedGeminiModel = defaults.string(forKey: "geminiModel") ?? LLMProviderKind.gemini.defaultModel
-        if storedGeminiModel == "gemini-2.5-flash" {
-            self.geminiModel = LLMProviderKind.gemini.defaultModel
-            defaults.set(LLMProviderKind.gemini.defaultModel, forKey: "geminiModel")
+        let storedAnthropicModel = defaults.string(forKey: "anthropicModel") ?? ""
+        self.anthropicModel = (storedAnthropicModel == "claude-haiku-4-5-20251001" || storedAnthropicModel == LLMProviderKind.anthropic.defaultModel)
+            ? ""
+            : storedAnthropicModel
+        let storedOpenAIModel = defaults.string(forKey: "openaiModel") ?? ""
+        self.openaiModel = (storedOpenAIModel == "gpt-4o-mini" || storedOpenAIModel == LLMProviderKind.openai.defaultModel)
+            ? ""
+            : storedOpenAIModel
+        let storedGeminiModel = defaults.string(forKey: "geminiModel") ?? ""
+        if storedGeminiModel == "gemini-2.5-flash" || storedGeminiModel == LLMProviderKind.gemini.defaultModel {
+            self.geminiModel = ""
+            defaults.set("", forKey: "geminiModel")
         } else {
             self.geminiModel = storedGeminiModel
         }
         self.customLLMBaseURL = defaults.string(forKey: "customLLMBaseURL") ?? OpenAICompatiblePreset.openrouter.baseURL
-        self.customLLMModel = defaults.string(forKey: "customLLMModel") ?? OpenAICompatiblePreset.openrouter.suggestedModel
+        let storedCustomModel = defaults.string(forKey: "customLLMModel") ?? ""
+        self.customLLMModel = storedCustomModel == OpenAICompatiblePreset.openrouter.suggestedModel ? "" : storedCustomModel
         self.uzbekStyle = UzbekStyle(rawValue: defaults.string(forKey: "uzbekStyle") ?? "") ?? .tashkent
         self.appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
-        self.paperThemeID = defaults.string(forKey: "paperThemeID") ?? PaperTheme.cleanSheet.id
+        self.paperThemeID = PaperTheme.cleanSheet.id
         self.paperDepth = defaults.object(forKey: "paperDepth") as? Double ?? 0.6
         self.paperGrainIntensity = defaults.object(forKey: "paperGrainIntensity") as? Double ?? 0.8
         self.fontPreset = FontPreset(rawValue: defaults.string(forKey: "fontPreset") ?? "") ?? .paperNewYork

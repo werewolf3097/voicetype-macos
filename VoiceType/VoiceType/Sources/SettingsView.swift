@@ -103,9 +103,11 @@ struct SettingsView: View {
         )
         .frame(minWidth: 740, minHeight: 540)
         .background { PaperBackground() }
-        .preferredColorScheme(settings.appearance.colorScheme)
         .onChange(of: settings.appearance) { _, mode in
             DashboardWindowController.shared.applyAppearance(mode)
+        }
+        .onChange(of: settings.paperThemeID) { _, _ in
+            DashboardWindowController.shared.applyAppearance(settings.appearance)
         }
         .onAppear {
             if PermissionsHelper.microphoneStatus() == .notDetermined {
@@ -645,6 +647,7 @@ final class DashboardWindowController {
     }
 
     func applyAppearance(_ mode: AppearanceMode) {
+        SystemAppearanceObserver.shared.refresh()
         switch mode {
         case .system:
             window?.appearance = nil
@@ -653,7 +656,7 @@ final class DashboardWindowController {
         case .dark:
             window?.appearance = NSAppearance(named: .darkAqua)
         }
-        let isDark = mode == .dark || (mode == .system && NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+        let isDark = mode == .dark || (mode == .system && SystemAppearanceObserver.currentSystemIsDark())
         if let settings {
             let resolved = PaperTheme.resolved(themeID: settings.paperThemeID, prefersDark: isDark)
             window?.backgroundColor = resolved.base.nsColor
