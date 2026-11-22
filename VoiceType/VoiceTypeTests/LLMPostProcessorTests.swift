@@ -40,12 +40,12 @@ final class LLMPostProcessorTests: XCTestCase {
 
         // 3. Google Gemini
         let gemini = LLMPostProcessor(
-            config: LLMConfiguration(provider: .gemini, apiKey: "AIza-test", model: "gemini-2.5-flash", customBaseURL: "")
+            config: LLMConfiguration(provider: .gemini, apiKey: "AIza-test", model: "gemini-3.8-flash", customBaseURL: "")
         )
         let gemReq = try gemini.buildRequest(systemPrompt: "sys", userPrompt: "usr")
         XCTAssertEqual(
             gemReq.url?.absoluteString,
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
         )
         XCTAssertEqual(gemReq.value(forHTTPHeaderField: "x-goog-api-key"), "AIza-test")
         let gemParsed = try gemini.parseResponseText(
@@ -76,11 +76,48 @@ final class LLMPostProcessorTests: XCTestCase {
         let store = SettingsStore(defaults: defaults, persistSecrets: false, syncDockIcon: false)
         store.llmProvider = .gemini
         store.geminiApiKey = "AIza-abc"
-        store.geminiModel = "gemini-2.5-flash"
+        store.geminiModel = "gemini-3.8-flash"
 
         XCTAssertTrue(store.isLLMConfigured)
         XCTAssertEqual(store.activeLLMConfig.provider, .gemini)
         XCTAssertEqual(store.activeLLMConfig.apiKey, "AIza-abc")
-        XCTAssertEqual(store.activeLLMConfig.resolvedModel, "gemini-2.5-flash")
+        XCTAssertEqual(store.activeLLMConfig.resolvedModel, "gemini-3.8-flash")
+    }
+
+    func testMigratesDeprecatedGemini25FlashTo38Flash() throws {
+        let suiteName = "com.farrukh.voicetype.tests.llm.mig.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("gemini-2.5-flash", forKey: "geminiModel")
+        let store = SettingsStore(defaults: defaults, persistSecrets: false, syncDockIcon: false)
+        XCTAssertEqual(store.geminiModel, "gemini-3.8-flash")
+    }
+
+    func testParseAvailableModelsForGeminiAnthropicAndOpenAI() throws {
+        let gemini = LLMPostProcessor(
+            config: LLMConfiguration(provider: .gemini, apiKey: "k", model: "", customBaseURL: "")
+        )
+        let gemJSON = Data("""
+        {
+          "models": [
+            {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/text-embedding-004", "supportedGenerationMethods": ["embedContent"]}
+          ]
+        }
+        """.utf8)
+        XCTAssertEqual(try gemini.parseAvailableModels(data: gemJSON), ["gemini-3.8-flash"])
+
+        let anthropic = LLMPostProcessor(
+            config: LLMConfiguration(provider: .anthropic, apiKey: "k", model: "", customBaseURL: "")
+        )
+        let antJSON = Data(#"{"data":[{"id":"claude-haiku-5-5"},{"id":"claude-sonnet-5-5"}]}"#.utf8)
+        XCTAssertEqual(try anthropic.parseAvailableModels(data: antJSON), ["claude-haiku-5-5", "claude-sonnet-5-5"])
+
+        let openai = LLMPostProcessor(
+            config: LLMConfiguration(provider: .openai, apiKey: "k", model: "", customBaseURL: "")
+        )
+        let oaiJSON = Data(#"{"data":[{"id":"gpt-5-mini"},{"id":"whisper-1"},{"id":"gpt-4o-realtime"}]}"#.utf8)
+        XCTAssertEqual(try openai.parseAvailableModels(data: oaiJSON), ["gpt-5-mini"])
     }
 }

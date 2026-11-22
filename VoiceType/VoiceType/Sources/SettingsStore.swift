@@ -429,7 +429,13 @@ final class SettingsStore: ObservableObject {
         self.llmProvider = LLMProviderKind(rawValue: defaults.string(forKey: "llmProvider") ?? "") ?? .anthropic
         self.anthropicModel = defaults.string(forKey: "anthropicModel") ?? LLMProviderKind.anthropic.defaultModel
         self.openaiModel = defaults.string(forKey: "openaiModel") ?? LLMProviderKind.openai.defaultModel
-        self.geminiModel = defaults.string(forKey: "geminiModel") ?? LLMProviderKind.gemini.defaultModel
+        let storedGeminiModel = defaults.string(forKey: "geminiModel") ?? LLMProviderKind.gemini.defaultModel
+        if storedGeminiModel == "gemini-2.5-flash" {
+            self.geminiModel = LLMProviderKind.gemini.defaultModel
+            defaults.set(LLMProviderKind.gemini.defaultModel, forKey: "geminiModel")
+        } else {
+            self.geminiModel = storedGeminiModel
+        }
         self.customLLMBaseURL = defaults.string(forKey: "customLLMBaseURL") ?? OpenAICompatiblePreset.openrouter.baseURL
         self.customLLMModel = defaults.string(forKey: "customLLMModel") ?? OpenAICompatiblePreset.openrouter.suggestedModel
         self.uzbekStyle = UzbekStyle(rawValue: defaults.string(forKey: "uzbekStyle") ?? "") ?? .tashkent

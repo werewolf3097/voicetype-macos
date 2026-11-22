@@ -24,6 +24,12 @@ struct DashboardSettingsView: View {
     )
     @State private var homeServerCheckState: ConnectionCheckState = .idle
     @State private var llmCheckState: ConnectionCheckState = .idle
+    @State private var fetchedModels: [LLMProviderKind: [String]] = [:]
+    @State private var isLoadingModels = false
+    @State private var modelsFetchError: String? = nil
+    @State private var showGapiKeyHelp = false
+    @State private var showLLMKeyHelp = false
+    @State private var showLLMModelHelp = false
     @State private var showAdvanced = false
     @State private var proUpsellTheme: PaperTheme? = nil
     @State private var inputDevices: [AudioInputDevice] = []
@@ -562,12 +568,22 @@ struct DashboardSettingsView: View {
                     systemImage: "key",
                     tileTint: PaperTokens.dictionaryTeal
                 ) {
-                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
-                        SecureField("Вставьте API-токен", text: $settings.gapiToken)
-                            .textFieldStyle(.plain)
-                            .font(fonts.ui)
+                    HStack(spacing: 6) {
+                        PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                            SecureField("Вставьте API-токен", text: $settings.gapiToken)
+                                .textFieldStyle(.plain)
+                                .font(fonts.ui)
+                        }
+                        .frame(width: 210)
+
+                        helpPopoverButton(
+                            isPresented: $showGapiKeyHelp,
+                            title: "Где взять токен gapi.uz",
+                            message: "Войдите в личный кабинет console.gapi.uz, откройте вкладку «API-токены» и создайте новый токен.",
+                            primaryLinkTitle: "Открыть console.gapi.uz",
+                            primaryURL: URL(string: "https://console.gapi.uz")!
+                        )
                     }
-                    .frame(width: 240)
                 }
             }
 
@@ -585,6 +601,7 @@ struct DashboardSettingsView: View {
                     )
                     .onChange(of: settings.llmProvider) { _, _ in
                         llmCheckState = .idle
+                        modelsFetchError = nil
                     }
                 }
 
@@ -639,34 +656,108 @@ struct DashboardSettingsView: View {
                     systemImage: "lock.shield",
                     tileTint: PaperTokens.dictionaryTeal
                 ) {
-                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
-                        SecureField(settings.llmProvider.apiKeyPlaceholder, text: currentLLMAPIKeyBinding)
-                            .textFieldStyle(.plain)
-                            .font(fonts.ui)
-                            .onChange(of: currentLLMAPIKeyBinding.wrappedValue) { _, _ in
-                                llmCheckState = .idle
-                            }
+                    HStack(spacing: 6) {
+                        PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                            SecureField(settings.llmProvider.apiKeyPlaceholder, text: currentLLMAPIKeyBinding)
+                                .textFieldStyle(.plain)
+                                .font(fonts.ui)
+                                .onChange(of: currentLLMAPIKeyBinding.wrappedValue) { _, _ in
+                                    llmCheckState = .idle
+                                }
+                        }
+                        .frame(width: 210)
+
+                        helpPopoverButton(
+                            isPresented: $showLLMKeyHelp,
+                            title: "Где получить ключ \(settings.llmProvider.shortTitle)",
+                            message: settings.llmProvider.keyHelpText,
+                            primaryLinkTitle: "Открыть кабинет ключей",
+                            primaryURL: settings.llmProvider.keyPortalURL,
+                            secondaryLinkTitle: "Документация моделей",
+                            secondaryURL: settings.llmProvider.modelsDocsURL
+                        )
                     }
-                    .frame(width: 240)
                 }
 
                 hairlineDivider
 
                 PaperSettingRow(
                     "Модель",
-                    caption: "По умолчанию: \(settings.llmProvider.defaultModel). Можно указать любую модель сервиса.",
+                    caption: modelsFetchError ?? "По умолчанию: \(settings.llmProvider.defaultModel). Выберите из списка или введите вручную.",
                     systemImage: "cpu",
                     tileTint: PaperTokens.dictionaryTeal
                 ) {
-                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
-                        TextField(settings.llmProvider.defaultModel, text: currentLLMModelBinding)
-                            .textFieldStyle(.plain)
-                            .font(fonts.ui)
-                            .onChange(of: currentLLMModelBinding.wrappedValue) { _, _ in
-                                llmCheckState = .idle
+                    HStack(spacing: 6) {
+                        PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                            TextField(settings.llmProvider.defaultModel, text: currentLLMModelBinding)
+                                .textFieldStyle(.plain)
+                                .font(fonts.ui)
+                                .onChange(of: currentLLMModelBinding.wrappedValue) { _, _ in
+                                    llmCheckState = .idle
+                                }
+                        }
+                        .frame(width: 148)
+
+                        Menu {
+                            Section("Рекомендуемые") {
+                                ForEach(settings.llmProvider.recommendedModels, id: \.id) { item in
+                                    Button {
+                                        currentLLMModelBinding.wrappedValue = item.id
+                                        llmCheckState = .idle
+                                    } label: {
+                                        Text("\(item.id) — \(item.note)")
+                                    }
+                                }
                             }
+
+                            if let live = fetchedModels[settings.llmProvider], !live.isEmpty {
+                                Section("Доступные по вашему ключу (\(live.count))") {
+                                    ForEach(live.prefix(40), id: \.self) { modelID in
+                                        Button(modelID) {
+                                            currentLLMModelBinding.wrappedValue = modelID
+                                            llmCheckState = .idle
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(paperTheme.inkColor)
+                                .frame(width: 24, height: 24)
+                                .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.chipRadius)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Выбрать модель из списка")
+                        .accessibilityLabel("Выбрать модель из списка")
+
+                        Button {
+                            refreshAvailableModels()
+                        } label: {
+                            if isLoadingModels {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .frame(width: 14, height: 14)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 10.5, weight: .medium))
+                            }
+                        }
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                        .disabled(isLoadingModels || !settings.isLLMConfigured)
+                        .help("Загрузить актуальный список моделей с сервера")
+                        .accessibilityLabel("Обновить список моделей")
+
+                        helpPopoverButton(
+                            isPresented: $showLLMModelHelp,
+                            title: "Какую модель указать",
+                            message: settings.llmProvider.modelsHelpText,
+                            primaryLinkTitle: "Список моделей в документации",
+                            primaryURL: settings.llmProvider.modelsDocsURL
+                        )
                     }
-                    .frame(width: 240)
                 }
 
                 hairlineDivider
@@ -767,9 +858,80 @@ struct DashboardSettingsView: View {
             do {
                 let latencyMs = try await LLMPostProcessor(config: config).testConnection()
                 llmCheckState = .success("Подключено · \(config.resolvedModel) (\(latencyMs) мс)")
+                refreshAvailableModels()
             } catch {
                 llmCheckState = .failure(error.localizedDescription)
             }
+        }
+    }
+
+    private func refreshAvailableModels() {
+        let config = settings.activeLLMConfig
+        guard config.isConfigured else { return }
+        isLoadingModels = true
+        modelsFetchError = nil
+        Task {
+            defer { isLoadingModels = false }
+            do {
+                let list = try await LLMPostProcessor(config: config).fetchAvailableModels()
+                fetchedModels[config.provider] = list
+            } catch {
+                modelsFetchError = "Не удалось загрузить список моделей: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func helpPopoverButton(
+        isPresented: Binding<Bool>,
+        title: String,
+        message: String,
+        primaryLinkTitle: String,
+        primaryURL: URL,
+        secondaryLinkTitle: String? = nil,
+        secondaryURL: URL? = nil
+    ) -> some View {
+        Button {
+            isPresented.wrappedValue.toggle()
+        } label: {
+            Image(systemName: "questionmark")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(paperTheme.secondaryInkColor)
+                .frame(width: 22, height: 22)
+                .paperSurface(level: .l2OnPaper, cornerRadius: 999)
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+        .popover(isPresented: isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(fonts.uiMedium)
+                    .foregroundStyle(paperTheme.inkColor)
+
+                Text(message)
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Button(primaryLinkTitle) {
+                        isPresented.wrappedValue = false
+                        NSWorkspace.shared.open(primaryURL)
+                    }
+                    .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
+
+                    if let secondaryLinkTitle, let secondaryURL {
+                        Button(secondaryLinkTitle) {
+                            isPresented.wrappedValue = false
+                            NSWorkspace.shared.open(secondaryURL)
+                        }
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                    }
+                }
+            }
+            .padding(14)
+            .frame(width: 310)
+            .background(paperTheme.baseColor)
         }
     }
 

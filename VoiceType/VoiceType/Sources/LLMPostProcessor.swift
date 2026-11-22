@@ -19,10 +19,81 @@ enum LLMProviderKind: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var defaultModel: String {
         switch self {
-        case .anthropic: return "claude-haiku-4-5"
-        case .openai: return "gpt-4o-mini"
-        case .gemini: return "gemini-2.5-flash"
+        case .anthropic: return "claude-haiku-5-5"
+        case .openai: return "gpt-5-mini"
+        case .gemini: return "gemini-3.8-flash"
         case .openaiCompatible: return "openai/gpt-4o-mini"
+        }
+    }
+
+    var recommendedModels: [(id: String, note: String)] {
+        switch self {
+        case .anthropic:
+            return [
+                ("claude-haiku-5-5", "Быстрая, для диктовки"),
+                ("claude-sonnet-5-5", "Умнее, для сложных текстов"),
+                ("claude-haiku-4-5", "Предыдущая Haiku"),
+                ("claude-sonnet-4-6", "Предыдущая Sonnet")
+            ]
+        case .openai:
+            return [
+                ("gpt-5-mini", "Оптимальная по скорости и цене"),
+                ("gpt-5-nano", "Самая быстрая и дешёвая"),
+                ("gpt-4.1-mini", "Стабильная мини-модель"),
+                ("gpt-4o-mini", "Классическая лёгкая модель")
+            ]
+        case .gemini:
+            return [
+                ("gemini-3.8-flash", "Актуальная быстрая Flash"),
+                ("gemini-3.6-flash", "Стабильная Gemini 3.6"),
+                ("gemini-3-flash-preview", "Preview-версия Gemini 3")
+            ]
+        case .openaiCompatible:
+            return OpenAICompatiblePreset.allCases.map { ($0.suggestedModel, $0.rawValue) }
+        }
+    }
+
+    var keyPortalURL: URL {
+        switch self {
+        case .anthropic: return URL(string: "https://console.anthropic.com/settings/keys")!
+        case .openai: return URL(string: "https://platform.openai.com/api-keys")!
+        case .gemini: return URL(string: "https://aistudio.google.com/apikey")!
+        case .openaiCompatible: return URL(string: "https://openrouter.ai/keys")!
+        }
+    }
+
+    var modelsDocsURL: URL {
+        switch self {
+        case .anthropic: return URL(string: "https://docs.anthropic.com/en/docs/about-claude/models")!
+        case .openai: return URL(string: "https://platform.openai.com/docs/models")!
+        case .gemini: return URL(string: "https://ai.google.dev/gemini-api/docs/models")!
+        case .openaiCompatible: return URL(string: "https://openrouter.ai/models")!
+        }
+    }
+
+    var keyHelpText: String {
+        switch self {
+        case .anthropic:
+            return "Ключ выпускается в Anthropic Console. Подписка Claude Pro/Max не включает API — нужен отдельный API-баланс."
+        case .openai:
+            return "Ключ создаётся в OpenAI Platform. Обычная подписка ChatGPT Plus не даёт доступ к API."
+        case .gemini:
+            return "Ключ бесплатно создаётся в Google AI Studio (не требует подписки Gemini Advanced)."
+        case .openaiCompatible:
+            return "Ключ берётся в кабинете выбранного сервиса (OpenRouter, Groq, DeepSeek). Для локальных Ollama / LM Studio поле можно оставить пустым."
+        }
+    }
+
+    var modelsHelpText: String {
+        switch self {
+        case .anthropic:
+            return "Указывайте точный ID модели из документации Anthropic (например, claude-haiku-5-5). Можно выбрать из списка или загрузить по вашему ключу."
+        case .openai:
+            return "Для быстрой очистки речи лучше подходят мини-модели вроде gpt-5-mini или gpt-4.1-mini."
+        case .gemini:
+            return "Модели серии Flash работают быстрее всего. Если модель устарела, обновите список кнопкой справа от поля."
+        case .openaiCompatible:
+            return "Имя модели зависит от провайдера: у OpenRouter формат «vendor/model», у Groq и Ollama — короткое имя модели."
         }
     }
 
@@ -220,6 +291,118 @@ struct LLMPostProcessor: Sendable {
             throw LLMError.emptyResponse
         }
         return max(1, Int(((CFAbsoluteTimeGetCurrent() - started) * 1000).rounded()))
+    }
+
+    func fetchAvailableModels() async throws -> [String] {
+        let request = try buildModelsListRequest()
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw LLMError.emptyResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let msg = Self.extractErrorMessage(from: data) ?? "HTTP \(http.statusCode)"
+            throw LLMError.httpError(statusCode: http.statusCode, message: msg)
+        }
+        return try parseAvailableModels(data: data)
+    }
+
+    func buildModelsListRequest(timeout: TimeInterval = 15) throws -> URLRequest {
+        switch config.provider {
+        case .anthropic:
+            guard !config.trimmedKey.isEmpty else {
+                throw LLMError.invalidConfiguration("Не задан Anthropic API key.")
+            }
+            var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/models")!)
+            req.httpMethod = "GET"
+            req.timeoutInterval = timeout
+            req.setValue(config.trimmedKey, forHTTPHeaderField: "x-api-key")
+            req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            return req
+
+        case .openai:
+            guard !config.trimmedKey.isEmpty else {
+                throw LLMError.invalidConfiguration("Не задан OpenAI API key.")
+            }
+            var req = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
+            req.httpMethod = "GET"
+            req.timeoutInterval = timeout
+            req.setValue("Bearer \(config.trimmedKey)", forHTTPHeaderField: "Authorization")
+            return req
+
+        case .gemini:
+            guard !config.trimmedKey.isEmpty else {
+                throw LLMError.invalidConfiguration("Не задан Google Gemini API key.")
+            }
+            var req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=100")!)
+            req.httpMethod = "GET"
+            req.timeoutInterval = timeout
+            req.setValue(config.trimmedKey, forHTTPHeaderField: "x-goog-api-key")
+            return req
+
+        case .openaiCompatible:
+            let chatURL = try LLMConfiguration.openAICompatibleEndpoint(from: config.normalizedCustomBaseURL)
+            let modelsURL = chatURL.deletingLastPathComponent().appendingPathComponent("models")
+            var req = URLRequest(url: modelsURL)
+            req.httpMethod = "GET"
+            req.timeoutInterval = timeout
+            if !config.trimmedKey.isEmpty {
+                req.setValue("Bearer \(config.trimmedKey)", forHTTPHeaderField: "Authorization")
+            }
+            return req
+        }
+    }
+
+    func parseAvailableModels(data: Data) throws -> [String] {
+        switch config.provider {
+        case .gemini:
+            struct GeminiModelsList: Decodable {
+                struct Item: Decodable {
+                    let name: String
+                    let supportedGenerationMethods: [String]?
+                }
+                let models: [Item]?
+            }
+            let decoded = try JSONDecoder().decode(GeminiModelsList.self, from: data)
+            let ids = (decoded.models ?? [])
+                .filter { item in
+                    guard let methods = item.supportedGenerationMethods else { return true }
+                    return methods.contains("generateContent")
+                }
+                .map { item in
+                    item.name.hasPrefix("models/") ? String(item.name.dropFirst(7)) : item.name
+                }
+                .filter { !$0.isEmpty }
+            return Array(NSOrderedSet(array: ids)) as? [String] ?? ids
+
+        case .anthropic, .openaiCompatible:
+            struct OpenAIModelsList: Decodable {
+                struct Item: Decodable { let id: String }
+                let data: [Item]?
+            }
+            let decoded = try JSONDecoder().decode(OpenAIModelsList.self, from: data)
+            let ids = (decoded.data ?? []).map(\.id).filter { !$0.isEmpty }
+            return Array(NSOrderedSet(array: ids)) as? [String] ?? ids
+
+        case .openai:
+            struct OpenAIModelsList: Decodable {
+                struct Item: Decodable { let id: String }
+                let data: [Item]?
+            }
+            let decoded = try JSONDecoder().decode(OpenAIModelsList.self, from: data)
+            let ids = (decoded.data ?? [])
+                .map(\.id)
+                .filter { id in
+                    let lower = id.lowercased()
+                    return (lower.hasPrefix("gpt-") || lower.hasPrefix("o1") || lower.hasPrefix("o3") || lower.hasPrefix("o4"))
+                        && !lower.contains("audio")
+                        && !lower.contains("realtime")
+                        && !lower.contains("transcribe")
+                        && !lower.contains("tts")
+                        && !lower.contains("image")
+                }
+                .sorted()
+            return Array(NSOrderedSet(array: ids)) as? [String] ?? ids
+        }
     }
 
     func complete(
