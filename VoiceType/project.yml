@@ -44,6 +44,7 @@ targets:
       - path: VoiceType/Sources/GapiClient.swift
       - path: VoiceType/Sources/RussianTransliterator.swift
       - path: VoiceType/Sources/TranscriptionProgress.swift
+      - path: VoiceType/Sources/PaperTheme.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farrukh.voicetype.tests

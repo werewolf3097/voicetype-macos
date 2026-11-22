@@ -6,6 +6,8 @@ struct DashboardSettingsView: View {
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var meetingsStore: MeetingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
     private enum HomeServerCheckState: Equatable {
         case idle
         case checking
@@ -22,19 +24,17 @@ struct DashboardSettingsView: View {
     @State private var homeServerCheckState: HomeServerCheckState = .idle
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Настройки")
-                        .font(ClaudeFonts.pageTitle)
-                        .tracking(-0.35)
-                        .foregroundStyle(theme.ink)
-                    Text("API-ключи, поведение хоткея, параметры встреч и системные разрешения")
-                        .font(ClaudeFonts.small)
-                        .foregroundStyle(theme.secondaryInk)
-                }
+                PaperPageHeader(
+                    "Настройки",
+                    subtitle: "API-ключи, поведение хоткея, параметры встреч и системные разрешения",
+                    systemImage: "gearshape",
+                    tileTint: PaperTokens.settingsSlate
+                )
 
                 settingsCard("Ключи API") {
                     settingRow(
@@ -74,7 +74,22 @@ struct DashboardSettingsView: View {
                         .frame(width: 220)
                     }
 
-                    Divider().overlay(theme.border)
+                    Divider().overlay(paperTheme.borderColor)
+
+                    settingRow(
+                        "Шрифт интерфейса",
+                        caption: "Выбор между New York + SF, Cormorant + Inter и системным SF."
+                    ) {
+                        Picker("", selection: $settings.fontPreset) {
+                            ForEach(FontPreset.allCases) { preset in
+                                Text(preset.rawValue).tag(preset)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
+
+                    Divider().overlay(paperTheme.borderColor)
 
                     settingRow(
                         "Значок в Dock",
@@ -82,8 +97,7 @@ struct DashboardSettingsView: View {
                     ) {
                         Toggle("", isOn: $settings.showDockIcon)
                             .labelsHidden()
-                            .toggleStyle(.switch)
-                            .tint(theme.accent)
+                            .toggleStyle(PaperToggleStyle())
                     }
                 }
 
@@ -275,7 +289,7 @@ struct DashboardSettingsView: View {
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
         }
-        .background(theme.canvas)
+        .background { PaperBackground() }
         .onAppear {
             if PermissionsHelper.microphoneStatus() == .notDetermined {
                 PermissionsHelper.requestMicrophone { _ in
@@ -598,22 +612,7 @@ struct DashboardSettingsView: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(ClaudeFonts.smallMedium)
-                .foregroundStyle(theme.secondaryInk)
-                .padding(.horizontal, 4)
-
-            VStack(alignment: .leading, spacing: 0) {
-                content()
-            }
-            .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(theme.border, lineWidth: 1)
-            )
-            .shadow(color: theme.cardShadow, radius: 8, y: 2)
-        }
+        PaperSettingGroup(title, content: content)
     }
 
     private func settingRow<Control: View>(
@@ -621,33 +620,18 @@ struct DashboardSettingsView: View {
         caption: String? = nil,
         @ViewBuilder control: () -> Control
     ) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 16) {
-                settingLabel(title, caption: caption)
-                    .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
-                control()
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                settingLabel(title, caption: caption)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                control()
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
+        PaperSettingRow(title, caption: caption, control: control)
     }
 
     private func settingLabel(_ title: String, caption: String?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(ClaudeFonts.uiMedium)
-                .foregroundStyle(theme.ink)
+                .font(fonts.uiMedium)
+                .foregroundStyle(paperTheme.inkColor)
             if let caption {
                 Text(caption)
-                    .font(ClaudeFonts.small)
-                    .foregroundStyle(theme.secondaryInk)
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

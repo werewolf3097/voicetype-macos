@@ -25,6 +25,8 @@ struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     @State private var sidebarVisible = true
     @State private var userToggledSidebar = false
@@ -33,6 +35,7 @@ struct SettingsView: View {
     private static let collapsedTopBarHeight: CGFloat = 44
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private var currentSection: DashboardSection {
         appState.selectedSection ?? .home
@@ -72,7 +75,7 @@ struct SettingsView: View {
                     .equatable()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .background(theme.canvas)
+            .background { PaperBackground() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
@@ -89,7 +92,7 @@ struct SettingsView: View {
             }
         )
         .frame(minWidth: 740, minHeight: 540)
-        .background(theme.canvas)
+        .background { PaperBackground() }
         .preferredColorScheme(settings.appearance.colorScheme)
         .onChange(of: settings.appearance) { _, mode in
             DashboardWindowController.shared.applyAppearance(mode)
@@ -145,6 +148,8 @@ private struct ClaudeSidebarView: View {
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var meetingsStore: MeetingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     let isVisible: Bool
     let onCollapse: () -> Void
@@ -153,6 +158,7 @@ private struct ClaudeSidebarView: View {
     @State private var hoveredMeetingID: UUID?
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private var currentSection: DashboardSection {
         appState.selectedSection ?? .home
@@ -302,11 +308,11 @@ private struct ClaudeSidebarView: View {
             .padding(10)
         }
         .frame(maxHeight: .infinity)
-        .background(theme.sidebar)
+        .background(paperTheme.sidebarColor)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(theme.border)
-                .frame(width: 1)
+                .fill(paperTheme.borderColor)
+                .frame(width: PaperTokens.hairline)
         }
     }
 
@@ -319,31 +325,37 @@ private struct ClaudeSidebarView: View {
         } label: {
             HStack(spacing: 8.5) {
                 ClaudeIcon(name: section.systemImage, size: 13.5, weight: isSelected ? .regular : .light)
-                    .foregroundStyle(isSelected ? theme.ink : theme.secondaryInk)
+                    .foregroundStyle(isSelected ? paperTheme.inkColor : paperTheme.secondaryInkColor)
                     .frame(width: 17)
 
                 Text(section.rawValue)
-                    .font(isSelected ? ClaudeFonts.uiMedium : ClaudeFonts.ui)
-                    .foregroundStyle(isSelected ? theme.ink : theme.ink.opacity(0.86))
+                    .font(isSelected ? fonts.uiMedium : fonts.ui)
+                    .foregroundStyle(isSelected ? paperTheme.inkColor : paperTheme.inkColor.opacity(0.86))
                     .lineLimit(1)
 
                 Spacer(minLength: 4)
 
                 if section == .meetings, appState.activeMeetingID == nil, activeProcessingCount > 0 {
                     Text("\(activeProcessingCount)")
-                        .font(ClaudeFonts.microSemibold.monospacedDigit())
-                        .foregroundStyle(theme.accentInk)
+                        .font(fonts.micro.monospacedDigit())
+                        .foregroundStyle(paperTheme.inkColor)
                         .padding(.horizontal, 5.5)
                         .padding(.vertical, 1.5)
-                        .background(theme.accentSoft, in: Capsule())
+                        .background(paperTheme.insetColor, in: Capsule())
                 }
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isSelected ? theme.selectedFill : (isHovered ? theme.hoverFill : Color.clear))
-            )
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+                        .fill(paperTheme.selectedSidebarColor)
+                        .paperSurface(level: .l1Inset, cornerRadius: PaperTokens.controlRadius)
+                } else if isHovered {
+                    RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+                        .fill(paperTheme.hoverColor)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -548,6 +560,7 @@ final class DashboardWindowController {
                 .environmentObject(settings)
                 .environmentObject(history)
                 .environmentObject(appState.meetings)
+                .applyPaperEnvironment(settings)
             let hostingController = NSHostingController(rootView: rootView)
             let newWindow = NSWindow(contentViewController: hostingController)
             newWindow.title = "VoiceType"

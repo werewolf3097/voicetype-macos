@@ -3,6 +3,8 @@ import SwiftUI
 struct DashboardDictionaryView: View {
     @EnvironmentObject var settings: SettingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     @State private var terms: [String] = []
     @State private var newTerm: String = ""
@@ -12,37 +14,34 @@ struct DashboardDictionaryView: View {
 
     private let maxTerms = 20
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Словарь терминов")
-                            .font(ClaudeFonts.pageTitle)
-                            .tracking(-0.35)
-                            .foregroundStyle(theme.ink)
-                        Text("Имена, бренды и термины, которые точнее распознаются в речи (до \(maxTerms) терминов на проект)")
-                            .font(ClaudeFonts.small)
-                            .foregroundStyle(theme.secondaryInk)
-                    }
-
-                    Spacer()
-
-                    if isLoading || isSaving {
-                        ProgressView().controlSize(.small)
-                    }
-
-                    Button {
-                        Task { await load() }
-                    } label: {
-                        HStack(spacing: 5) {
-                            ClaudeIcon(name: "arrow.clockwise", size: 11, weight: .light)
-                            Text("Обновить")
+                PaperPageHeader(
+                    "Словарь терминов",
+                    subtitle: "Имена, бренды и термины, которые точнее распознаются в речи (до \(maxTerms) терминов на проект)",
+                    systemImage: "book.closed",
+                    tileTint: PaperTokens.dictionaryTeal
+                ) {
+                    HStack(spacing: 8) {
+                        if isLoading || isSaving {
+                            ProgressView().controlSize(.small)
                         }
+
+                        Button {
+                            Task { await load() }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 11, weight: .regular))
+                                Text("Обновить")
+                            }
+                        }
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                        .disabled(settings.gapiToken.isEmpty || isLoading)
                     }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
-                    .disabled(settings.gapiToken.isEmpty || isLoading)
                 }
 
                 if settings.gapiToken.isEmpty {
@@ -150,7 +149,7 @@ struct DashboardDictionaryView: View {
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
         }
-        .background(theme.canvas)
+        .background { PaperBackground() }
         .task { await load() }
     }
 

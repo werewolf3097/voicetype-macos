@@ -9,11 +9,14 @@
 /* Begin PBXBuildFile section */
 		0B146B2A0F90C204C0E7748B /* TextInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94E90680F395346C87F5BA5E /* TextInjector.swift */; };
 		1187A633B51B95FF22CCABD9 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87C596586B6F5B8CADC66EEE /* AppState.swift */; };
+		150BD4FE6E5EDE4EA23C19F9 /* PaperTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87F6245A79B7E7E8AE9738A4 /* PaperTheme.swift */; };
 		1600349D731E16AB7B7AB5DF /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = DEF92EBB6413802A0028C4C2 /* Fonts */; };
 		1693D9083766D1FBE308129D /* DashboardMeetingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 434B7FF79F533D836E0BAE02 /* DashboardMeetingsView.swift */; };
+		1779AC5DE7116E15A868B607 /* PaperTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87F6245A79B7E7E8AE9738A4 /* PaperTheme.swift */; };
 		2422154AA3C87EFD49F5F78B /* HomeServerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852F823EA043399D5BD32BC2 /* HomeServerProvider.swift */; };
 		25550EC35ABA028C40673C7F /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8254E25852DB8ED4DF25042 /* SettingsStore.swift */; };
 		26B914043810B81C4E17B615 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D7C9B125AD39E9D080C12A /* HistoryStore.swift */; };
+		282DD22B38A88AA8AE3F1726 /* PaperThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D0DAD189833F8BC56C05D61 /* PaperThemeTests.swift */; };
 		30CA5392433C844011C08AD8 /* ClaudeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4788B416BBA06D7AD88708F /* ClaudeClient.swift */; };
 		38125EA2E57140B4C8106740 /* MockGatewayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82B3833A4F6D037A5C9A79DB /* MockGatewayServer.swift */; };
 		40C69FD7C5714D80A9203E14 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413F19B4B726CDF7049FCAFF /* MenuBarView.swift */; };
@@ -37,6 +40,7 @@
 		A9B87AC54BC47816FDED75EB /* DashboardHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4867DFE5229711CA29F6228C /* DashboardHistoryView.swift */; };
 		AFED708539D2A3D573978EBB /* UzbekDialectConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2762FB627A74AD05CC115BA2 /* UzbekDialectConverter.swift */; };
 		BA5EB1B4E80D467FBC790C12 /* HomeServerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852F823EA043399D5BD32BC2 /* HomeServerProvider.swift */; };
+		BDE55C657B2152C648B4669D /* PaperComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0922BA428295CD4FA4241CB1 /* PaperComponents.swift */; };
 		BF178805A566311A0FDBA55D /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715FDB0292B41137BBE0B825 /* KeychainStore.swift */; };
 		D0DE0E2980FCDB8039E65668 /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19FA06FF64AE11EF072A1B2 /* TranscriptionProvider.swift */; };
 		D5DF592090940957E46BAD99 /* VoiceTypeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DA4F1C6F8F0BE0AE040AF96 /* VoiceTypeApp.swift */; };
@@ -55,6 +59,7 @@
 
 /* Begin PBXFileReference section */
 		0865A1C6BFA9FD9C2D0DE740 /* DashboardDictionaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardDictionaryView.swift; sourceTree = "<group>"; };
+		0922BA428295CD4FA4241CB1 /* PaperComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperComponents.swift; sourceTree = "<group>"; };
 		12DB855FD285B442661651E2 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		219237FAD744F137F793AFD3 /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCompressor.swift; sourceTree = "<group>"; };
 		231D013701E52125293C80A0 /* MeetingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsStore.swift; sourceTree = "<group>"; };
@@ -62,6 +67,7 @@
 		2C69AFF8A2BDE3F922F021D4 /* DashboardHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHomeView.swift; sourceTree = "<group>"; };
 		358AB5B314F5339BC687EB72 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		38F5A8542089BAFAF0481165 /* PermissionsHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsHelper.swift; sourceTree = "<group>"; };
+		3D0DAD189833F8BC56C05D61 /* PaperThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperThemeTests.swift; sourceTree = "<group>"; };
 		413F19B4B726CDF7049FCAFF /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		434B7FF79F533D836E0BAE02 /* DashboardMeetingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardMeetingsView.swift; sourceTree = "<group>"; };
 		43CC8D05C02FE1DC9F791B2F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -77,6 +83,7 @@
 		837187363F5CCAD765471989 /* VoiceType.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoiceType.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		852F823EA043399D5BD32BC2 /* HomeServerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeServerProvider.swift; sourceTree = "<group>"; };
 		87C596586B6F5B8CADC66EEE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		87F6245A79B7E7E8AE9738A4 /* PaperTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperTheme.swift; sourceTree = "<group>"; };
 		8D251140F6C40533A57579A9 /* VoiceTypeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoiceTypeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8DA4F1C6F8F0BE0AE040AF96 /* VoiceTypeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTypeApp.swift; sourceTree = "<group>"; };
 		927E09303D17328F64E20461 /* ClaudeTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeTheme.swift; sourceTree = "<group>"; };
@@ -138,6 +145,8 @@
 				231D013701E52125293C80A0 /* MeetingsStore.swift */,
 				413F19B4B726CDF7049FCAFF /* MenuBarView.swift */,
 				66B187B6F55F20E36907FBB1 /* NotificationHelper.swift */,
+				0922BA428295CD4FA4241CB1 /* PaperComponents.swift */,
+				87F6245A79B7E7E8AE9738A4 /* PaperTheme.swift */,
 				38F5A8542089BAFAF0481165 /* PermissionsHelper.swift */,
 				DF084FBC0A7AED8A73AC04AB /* RecordingIndicatorController.swift */,
 				FDF5C060AAEFC6E9B4EF67A5 /* RecordingIndicatorView.swift */,
@@ -159,6 +168,7 @@
 			children = (
 				B03ADEB6EF72A42848267649 /* HomeServerProviderTests.swift */,
 				82B3833A4F6D037A5C9A79DB /* MockGatewayServer.swift */,
+				3D0DAD189833F8BC56C05D61 /* PaperThemeTests.swift */,
 			);
 			path = VoiceTypeTests;
 			sourceTree = "<group>";
@@ -275,6 +285,8 @@
 				2422154AA3C87EFD49F5F78B /* HomeServerProvider.swift in Sources */,
 				4B82BFC08A4BAC5147B0F3C0 /* HomeServerProviderTests.swift in Sources */,
 				38125EA2E57140B4C8106740 /* MockGatewayServer.swift in Sources */,
+				1779AC5DE7116E15A868B607 /* PaperTheme.swift in Sources */,
+				282DD22B38A88AA8AE3F1726 /* PaperThemeTests.swift in Sources */,
 				E73343D924B0F1A6B8C5CE93 /* RussianTransliterator.swift in Sources */,
 				73127A097B3ED05F2DE50CE5 /* TranscriptionProgress.swift in Sources */,
 				46F6BC3694AAC48599DFBAD1 /* TranscriptionProvider.swift in Sources */,
@@ -307,6 +319,8 @@
 				6D17B1D3ED82C05AE193C25B /* MeetingsStore.swift in Sources */,
 				40C69FD7C5714D80A9203E14 /* MenuBarView.swift in Sources */,
 				A2822830C2DCB50261953929 /* NotificationHelper.swift in Sources */,
+				BDE55C657B2152C648B4669D /* PaperComponents.swift in Sources */,
+				150BD4FE6E5EDE4EA23C19F9 /* PaperTheme.swift in Sources */,
 				EA4116739D8F68D3BD6B8FAA /* PermissionsHelper.swift in Sources */,
 				9E128249C43CDDE844B6FB28 /* RecordingIndicatorController.swift in Sources */,
 				76190F56FD017AC44CFF97E6 /* RecordingIndicatorView.swift in Sources */,

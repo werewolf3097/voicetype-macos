@@ -3,12 +3,15 @@ import SwiftUI
 struct DashboardHistoryView: View {
     @EnvironmentObject var history: HistoryStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     @State private var searchQuery = ""
     @State private var showClearConfirm = false
     @State private var copiedID: UUID?
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private var filteredRecords: [TranscriptionRecord] {
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -23,52 +26,42 @@ struct DashboardHistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("История диктовок")
-                            .font(ClaudeFonts.pageTitle)
-                            .tracking(-0.35)
-                            .foregroundStyle(theme.ink)
-                        Text("Хранится только на этом Mac в Application Support/VoiceType/history.json")
-                            .font(ClaudeFonts.small)
-                            .foregroundStyle(theme.secondaryInk)
-                    }
-
-                    Spacer()
-
+                PaperPageHeader(
+                    "История диктовок",
+                    subtitle: "Хранится только на этом Mac в Application Support/VoiceType/history.json",
+                    systemImage: "clock",
+                    tileTint: PaperTokens.historyGreen
+                ) {
                     if !history.records.isEmpty {
                         Button("Очистить") {
                             showClearConfirm = true
                         }
-                        .buttonStyle(ClaudeSecondaryButtonStyle(compact: true, isDestructive: true))
+                        .buttonStyle(PaperButtonStyle(role: .destructive, compact: true))
                     }
                 }
 
                 if !history.records.isEmpty {
-                    HStack(spacing: 6) {
-                        ClaudeIcon(name: "magnifyingglass", size: 11.5, weight: .light)
-                            .foregroundStyle(theme.secondaryInk)
-                        TextField("Поиск по расшифровкам…", text: $searchQuery)
-                            .textFieldStyle(.plain)
-                            .font(ClaudeFonts.ui)
-                            .foregroundStyle(theme.ink)
-                        if !searchQuery.isEmpty {
-                            Button {
-                                searchQuery = ""
-                            } label: {
-                                ClaudeIcon(name: "xmark", size: 10, weight: .regular)
-                                    .foregroundStyle(theme.secondaryInk)
+                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 10, verticalPadding: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 11.5, weight: .regular))
+                                .foregroundStyle(paperTheme.secondaryInkColor)
+                            TextField("Поиск по расшифровкам…", text: $searchQuery)
+                                .textFieldStyle(.plain)
+                                .font(fonts.ui)
+                                .foregroundStyle(paperTheme.inkColor)
+                            if !searchQuery.isEmpty {
+                                Button {
+                                    searchQuery = ""
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(paperTheme.secondaryInkColor)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(theme.border, lineWidth: 1)
-                    )
                 }
             }
             .frame(maxWidth: 820, alignment: .leading)
@@ -178,7 +171,7 @@ struct DashboardHistoryView: View {
                 }
             }
         }
-        .background(theme.canvas)
+        .background { PaperBackground() }
         .confirmationDialog("Удалить всю историю расшифровок?", isPresented: $showClearConfirm, titleVisibility: .visible) {
             Button("Удалить всё", role: .destructive) { history.clear() }
             Button("Отмена", role: .cancel) {}

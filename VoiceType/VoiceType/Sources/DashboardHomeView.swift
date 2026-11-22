@@ -5,12 +5,15 @@ struct DashboardHomeView: View {
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var history: HistoryStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     @State private var quickMeetingTitle: String = ""
     @State private var selectedTemplate: MeetingTemplate = .general
     @State private var copiedLast = false
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     var body: some View {
         ScrollView {
@@ -53,7 +56,7 @@ struct DashboardHomeView: View {
             .padding(.vertical, 20)
         }
         .scrollIndicators(.hidden)
-        .background(theme.canvas)
+        .background { PaperBackground() }
     }
 
     // MARK: - Hero Header
@@ -75,19 +78,21 @@ struct DashboardHomeView: View {
 
     private var heroTitleBlock: some View {
         HStack(spacing: 12) {
-            ClaudeIcon(name: "waveform", size: 18, weight: .light)
-                .foregroundStyle(theme.accent)
-                .frame(width: 36, height: 36)
-                .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            PaperSectionTile(
+                systemImage: "waveform",
+                tint: PaperTokens.dictationBlue,
+                size: 36,
+                iconSize: 16
+            )
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Говорите, не печатайте")
-                    .font(ClaudeFonts.heroTitle)
+                    .font(fonts.heroTitle)
                     .tracking(-0.45)
-                    .foregroundStyle(theme.ink)
+                    .foregroundStyle(paperTheme.inkColor)
                 Text(hotkeyHintText)
-                    .font(ClaudeFonts.small)
-                    .foregroundStyle(theme.secondaryInk)
+                    .font(fonts.caption)
+                    .foregroundStyle(paperTheme.secondaryInkColor)
             }
         }
     }

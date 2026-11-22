@@ -5,11 +5,14 @@ struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
     @Environment(\.dismiss) private var dismiss
 
     @State private var windowBox = MenuBarWindowBox()
 
     private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private func dismissMenuBar() {
         dismiss()
@@ -125,7 +128,7 @@ struct MenuBarView: View {
         }
         .padding(10)
         .frame(width: 274)
-        .background(theme.canvas)
+        .background(paperTheme.baseColor)
         .background(MenuBarWindowAccessor(box: windowBox))
         .tint(theme.accent)
         .preferredColorScheme(settings.appearance.colorScheme)

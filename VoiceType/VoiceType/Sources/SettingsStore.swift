@@ -114,6 +114,18 @@ final class SettingsStore: ObservableObject {
     @Published var appearance: AppearanceMode {
         didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "appearance") }
     }
+    @Published var paperThemeID: String {
+        didSet { UserDefaults.standard.set(paperThemeID, forKey: "paperThemeID") }
+    }
+    @Published var paperDepth: Double {
+        didSet { UserDefaults.standard.set(paperDepth, forKey: "paperDepth") }
+    }
+    @Published var paperGrainIntensity: Double {
+        didSet { UserDefaults.standard.set(paperGrainIntensity, forKey: "paperGrainIntensity") }
+    }
+    @Published var fontPreset: FontPreset {
+        didSet { UserDefaults.standard.set(fontPreset.rawValue, forKey: "fontPreset") }
+    }
     @Published var showDockIcon: Bool {
         didSet {
             UserDefaults.standard.set(showDockIcon, forKey: "showDockIcon")
@@ -196,6 +208,10 @@ final class SettingsStore: ObservableObject {
         self.cleanupStyle = CleanupStyle(rawValue: defaults.string(forKey: "cleanupStyle") ?? "") ?? .grammar
         self.uzbekStyle = UzbekStyle(rawValue: defaults.string(forKey: "uzbekStyle") ?? "") ?? .tashkent
         self.appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
+        self.paperThemeID = defaults.string(forKey: "paperThemeID") ?? PaperTheme.cleanSheet.id
+        self.paperDepth = defaults.object(forKey: "paperDepth") as? Double ?? 0.6
+        self.paperGrainIntensity = defaults.object(forKey: "paperGrainIntensity") as? Double ?? 0.8
+        self.fontPreset = FontPreset(rawValue: defaults.string(forKey: "fontPreset") ?? "") ?? .paperNewYork
         self.showDockIcon = defaults.object(forKey: "showDockIcon") as? Bool ?? true
         self.meetingAudioSource = MeetingAudioSource(rawValue: defaults.string(forKey: "meetingAudioSource") ?? "") ?? .micAndSystem
         self.enableGapiSummary = defaults.object(forKey: "enableGapiSummary") as? Bool ?? false

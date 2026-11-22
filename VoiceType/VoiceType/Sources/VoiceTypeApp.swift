@@ -6,6 +6,7 @@ struct VoiceTypeApp: App {
     @StateObject private var settings: SettingsStore
     @StateObject private var history: HistoryStore
     @StateObject private var appState: AppState
+    @StateObject private var entitlement = LocalProEntitlement()
 
     init() {
         ClaudeFonts.registerBundledFonts()
@@ -28,6 +29,8 @@ struct VoiceTypeApp: App {
                 .environmentObject(appState)
                 .environmentObject(settings)
                 .environmentObject(appState.meetings)
+                .environment(\.proEntitlement, entitlement)
+                .applyPaperEnvironment(settings)
         } label: {
             MenuBarIcon(status: appState.status)
         }
@@ -39,6 +42,8 @@ struct VoiceTypeApp: App {
                 .environmentObject(settings)
                 .environmentObject(history)
                 .environmentObject(appState.meetings)
+                .environment(\.proEntitlement, entitlement)
+                .applyPaperEnvironment(settings)
         }
     }
 }
