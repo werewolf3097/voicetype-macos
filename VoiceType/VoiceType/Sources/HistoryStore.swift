@@ -1,14 +1,78 @@
 import Foundation
 
+enum InsertStatus: String, Codable, Equatable, Sendable {
+    case inserted
+    case clipboardOnly
+    case failed
+}
+
 struct TranscriptionRecord: Identifiable, Codable, Equatable {
     let id: UUID
     let date: Date
     let text: String
     let durationSeconds: Double
-    var languageCode: String? = nil
-    var languageSummary: String? = nil
-    var engine: String? = nil
-    var latencyMs: Int? = nil
+    var status: InsertStatus
+    var targetApp: String?
+    var errorMessage: String?
+    var style: CleanupStyle?
+    var languageCode: String?
+    var languageSummary: String?
+    var engine: String?
+    var latencyMs: Int?
+
+    init(
+        id: UUID = UUID(),
+        date: Date = Date(),
+        text: String,
+        durationSeconds: Double,
+        status: InsertStatus = .inserted,
+        targetApp: String? = nil,
+        errorMessage: String? = nil,
+        style: CleanupStyle? = nil,
+        languageCode: String? = nil,
+        languageSummary: String? = nil,
+        engine: String? = nil,
+        latencyMs: Int? = nil
+    ) {
+        self.id = id
+        self.date = date
+        self.text = text
+        self.durationSeconds = durationSeconds
+        self.status = status
+        self.targetApp = targetApp
+        self.errorMessage = errorMessage
+        self.style = style
+        self.languageCode = languageCode
+        self.languageSummary = languageSummary
+        self.engine = engine
+        self.latencyMs = latencyMs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, date, text, durationSeconds
+        case status, targetApp, errorMessage, style
+        case languageCode, languageSummary, engine, latencyMs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.date = try container.decodeIfPresent(Date.self, forKey: .date) ?? Date()
+        self.text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+        self.durationSeconds = try container.decodeIfPresent(Double.self, forKey: .durationSeconds) ?? 0
+        self.status = try container.decodeIfPresent(InsertStatus.self, forKey: .status) ?? .inserted
+        self.targetApp = try container.decodeIfPresent(String.self, forKey: .targetApp)
+        self.errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        if let rawStyle = try container.decodeIfPresent(String.self, forKey: .style) {
+            self.style = CleanupStyle(rawValue: rawStyle)
+        } else {
+            self.style = nil
+        }
+        self.languageCode = try container.decodeIfPresent(String.self, forKey: .languageCode)
+        self.languageSummary = try container.decodeIfPresent(String.self, forKey: .languageSummary)
+        self.engine = try container.decodeIfPresent(String.self, forKey: .engine)
+        self.latencyMs = try container.decodeIfPresent(Int.self, forKey: .latencyMs)
+    }
 
     var wordCount: Int {
         text.split(whereSeparator: { $0.isWhitespace }).count
@@ -44,17 +108,27 @@ final class HistoryStore: ObservableObject {
     func add(
         text: String,
         durationSeconds: Double,
+        status: InsertStatus = .inserted,
+        targetApp: String? = nil,
+        errorMessage: String? = nil,
+        style: CleanupStyle? = nil,
         languageCode: String? = nil,
         languageSummary: String? = nil,
         engine: String? = nil,
         latencyMs: Int? = nil
     ) {
-        guard !text.isEmpty else { return }
+        if text.isEmpty && status != .failed {
+            return
+        }
         let record = TranscriptionRecord(
             id: UUID(),
             date: Date(),
             text: text,
             durationSeconds: durationSeconds,
+            status: status,
+            targetApp: targetApp,
+            errorMessage: errorMessage,
+            style: style,
             languageCode: languageCode,
             languageSummary: languageSummary,
             engine: engine,
@@ -64,6 +138,14 @@ final class HistoryStore: ObservableObject {
         if records.count > maxRecords {
             records.removeLast(records.count - maxRecords)
         }
+        save()
+    }
+
+    func update(id: UUID, transform: (inout TranscriptionRecord) -> Void) {
+        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
+        var updated = records[idx]
+        transform(&updated)
+        records[idx] = updated
         save()
     }
 

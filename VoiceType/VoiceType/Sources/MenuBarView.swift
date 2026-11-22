@@ -158,9 +158,7 @@ struct MenuBarView: View {
     }
 
     private var hotkeyHint: String {
-        settings.recordingMode == .toggle
-            ? "\(settings.hotkey.rawValue) · старт/стоп"
-            : "\(settings.hotkey.rawValue) · удержание"
+        "\(settings.shortcutDisplayLabel) · \(settings.shortcutMode.shortTitle)"
     }
 
     @ViewBuilder

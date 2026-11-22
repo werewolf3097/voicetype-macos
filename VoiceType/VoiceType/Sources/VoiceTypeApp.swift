@@ -41,6 +41,7 @@ struct VoiceTypeApp: App {
                 .environmentObject(appState)
                 .environmentObject(settings)
                 .environmentObject(history)
+                .environmentObject(appState.dictionary)
                 .environmentObject(appState.meetings)
                 .environment(\.proEntitlement, entitlement)
                 .applyPaperEnvironment(settings)

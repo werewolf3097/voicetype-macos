@@ -98,9 +98,14 @@ struct DashboardHomeView: View {
     }
 
     private var hotkeyHintText: String {
-        settings.recordingMode == .toggle
-            ? "Диктовка: нажмите \(settings.hotkey.rawValue) для старта и ещё раз для вставки · Esc отменяет"
-            : "Диктовка: удерживайте \(settings.hotkey.rawValue), говорите и отпустите · Esc отменяет"
+        switch settings.shortcutMode {
+        case .holdOrDoubleTap:
+            return "Диктовка: удерживайте \(settings.shortcutDisplayLabel) или нажмите дважды · Esc отменяет"
+        case .toggle:
+            return "Диктовка: нажмите \(settings.shortcutDisplayLabel) для старта и ещё раз для вставки · Esc отменяет"
+        case .hold:
+            return "Диктовка: удерживайте \(settings.shortcutDisplayLabel), говорите и отпустите · Esc отменяет"
+        }
     }
 
     private var statusPill: some View {

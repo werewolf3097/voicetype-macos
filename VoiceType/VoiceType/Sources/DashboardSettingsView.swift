@@ -103,43 +103,70 @@ struct DashboardSettingsView: View {
 
                 settingsCard("Голос и диктовка") {
                     settingRow("Клавиша записи") {
-                        Picker("", selection: $settings.hotkey) {
-                            ForEach(PushToTalkKey.allCases) { key in
-                                Text(key.rawValue).tag(key)
+                        HStack(spacing: 8) {
+                            Picker("", selection: $settings.shortcutKey) {
+                                ForEach(ShortcutKey.allCases) { key in
+                                    Text(key.displayName).tag(key)
+                                }
                             }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220)
-                        .onChange(of: settings.hotkey) { _, _ in
-                            appState.restartHotkeyListener()
+                            .labelsHidden()
+                            .frame(width: 120)
+                            .onChange(of: settings.shortcutKey) { _, _ in
+                                appState.restartHotkeyListener()
+                            }
+
+                            Picker("", selection: $settings.shortcutSide) {
+                                ForEach(ShortcutSide.allCases) { side in
+                                    Text(side.rawValue).tag(side)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 100)
+                            .onChange(of: settings.shortcutSide) { _, _ in
+                                appState.restartHotkeyListener()
+                            }
                         }
                     }
 
-                    Divider().overlay(theme.border)
+                    Divider().overlay(paperTheme.borderColor)
 
                     settingRow(
                         "Режим записи",
-                        caption: "«По нажатию» — один раз для старта, ещё раз для отправки. Escape отменяет запись."
+                        caption: settings.shortcutMode.descriptionText
                     ) {
-                        Picker("", selection: $settings.recordingMode) {
-                            ForEach(RecordingMode.allCases) { mode in
+                        Picker("", selection: $settings.shortcutMode) {
+                            ForEach(ShortcutMode.allCases) { mode in
+                                Text(mode.rawValue).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 240)
+                        .onChange(of: settings.shortcutMode) { _, _ in
+                            appState.refreshPermissionsAndHotkey()
+                        }
+                    }
+
+                    Divider().overlay(paperTheme.borderColor)
+
+                    settingRow("Вставка текста") {
+                        Picker("", selection: $settings.pasteMode) {
+                            ForEach(PasteMode.allCases) { mode in
                                 Text(mode.rawValue).tag(mode)
                             }
                         }
                         .labelsHidden()
                         .frame(width: 220)
-                        .onChange(of: settings.recordingMode) { _, _ in
-                            appState.refreshPermissionsAndHotkey()
-                        }
                     }
 
-                    Divider().overlay(theme.border)
+                    Divider().overlay(paperTheme.borderColor)
 
-                    settingRow("Автовставка (Cmd+V)") {
-                        Toggle("", isOn: $settings.autoPaste)
+                    settingRow(
+                        "Восстанавливать буфер обмена",
+                        caption: "Возвращает прежнее содержимое буфера через ~400 мс после автовставки."
+                    ) {
+                        Toggle("", isOn: $settings.restoreClipboard)
                             .labelsHidden()
-                            .toggleStyle(.switch)
-                            .tint(theme.accent)
+                            .toggleStyle(PaperToggleStyle())
                     }
 
                     Divider().overlay(theme.border)

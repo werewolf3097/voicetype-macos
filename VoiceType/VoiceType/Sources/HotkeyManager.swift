@@ -2,18 +2,28 @@ import CoreGraphics
 import Foundation
 
 final class HotkeyManager {
-    var targetKeyCode: CGKeyCode = 61
-    var mode: RecordingMode = .toggle
+    var shortcutKey: ShortcutKey = .option
+    var shortcutSide: ShortcutSide = .either
+    var mode: ShortcutMode = .holdOrDoubleTap {
+        didSet {
+            if stateMachine.mode != mode {
+                stateMachine.mode = mode
+                stateMachine.reset()
+                cancelDeadlineWorkItem()
+            }
+        }
+    }
+
     var onStart: (() -> Void)?
     var onStop: (() -> Void)?
-    var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
     var isRecording: (() -> Bool)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var healthCheckTimer: Timer?
-    private var isDown = false
+    private var deadlineWorkItem: DispatchWorkItem?
+    private var stateMachine = HotkeyStateMachine()
 
     private(set) var canSwallowEvents = false
 
@@ -31,10 +41,9 @@ final class HotkeyManager {
             return (swallow && manager.canSwallowEvents) ? nil : Unmanaged.passUnretained(event)
         }
 
-        // .cghidEventTap taps the keyboard at the hardware level, before the window
-        // server routes the event to a session/frontmost app.
-        // .defaultTap allows swallowing Escape during recording, but requires Accessibility.
-        // Fall back to .listenOnly (which only requires Input Monitoring) if .defaultTap fails.
+        // .cghidEventTap перехватывает события клавиатуры на аппаратном уровне до маршрутизации в приложение.
+        // .defaultTap позволяет глотать Escape во время записи, но требует Accessibility;
+        // при его отсутствии откатываемся на .listenOnly (достаточно Input Monitoring).
         var createdTap: CFMachPort?
         if PermissionsHelper.accessibilityAuthorized() {
             createdTap = CGEvent.tapCreate(
@@ -82,6 +91,7 @@ final class HotkeyManager {
     }
 
     func stop() {
+        cancelDeadlineWorkItem()
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
@@ -92,69 +102,115 @@ final class HotkeyManager {
         healthCheckTimer = nil
         eventTap = nil
         runLoopSource = nil
-        isDown = false
+        stateMachine.reset()
     }
 
-    /// Defense in depth beyond the tapDisabledBy* callback below: catches any other
-    /// silent disablement the OS doesn't explicitly notify the callback about.
+    func notifyRecordingEndedExternally() {
+        stateMachine.syncRecordingEnded()
+        scheduleDeadlineIfNeeded()
+    }
+
     private func checkTapHealth() {
         guard let eventTap, !CGEvent.tapIsEnabled(tap: eventTap) else { return }
         CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Bool {
-        // macOS can silently disable a tap (timeout, or user-input pressure) — without
-        // this it just stops receiving events forever and the hotkey looks "dead".
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
             return false
         }
 
+        let now = ProcessInfo.processInfo.systemUptime
+
         if type == .keyDown {
             let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-            if keyCode == 53 { // 53 is Escape
-                if isDown || (isRecording?() == true) {
-                    isDown = false
+            let isEscape = keyCode == 53
+            let systemRecording = isRecording?() ?? false
+            let actions = stateMachine.handleOtherKeyDown(isEscape: isEscape)
+            scheduleDeadlineIfNeeded()
+            dispatch(actions)
+
+            if isEscape && (systemRecording || actions.contains(.cancelRecording)) {
+                if !actions.contains(.cancelRecording) {
                     DispatchQueue.main.async { [weak self] in self?.onCancel?() }
-                    return true // Swallow the Escape key
                 }
+                return true
             }
             return false
         }
 
         guard type == .flagsChanged else { return false }
-        let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-        guard keyCode == targetKeyCode else { return false }
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
 
-        let pressed = event.flags.rawValue & modifierFlagBit(for: keyCode) != 0
-        switch mode {
-        case .toggle:
-            if pressed && !isDown {
-                isDown = true
-                DispatchQueue.main.async { [weak self] in self?.onToggle?() }
-            } else if !pressed && isDown {
-                isDown = false
+        if !shortcutKey.matches(keyCode: keyCode, side: shortcutSide) {
+            // Другой модификатор (например, ⌘ или ⇧ вместе с ⌥) тоже отменяет одиночное нажатие.
+            let isPressed = ShortcutKey.matchesAnySide(keyCode: keyCode).map {
+                event.flags.rawValue & modifierFlagBit(for: $0) != 0
+            } ?? false
+            if isPressed {
+                let actions = stateMachine.handleOtherKeyDown(isEscape: false)
+                scheduleDeadlineIfNeeded()
+                dispatch(actions)
             }
-        case .hold:
-            if pressed && !isDown {
-                isDown = true
-                DispatchQueue.main.async { [weak self] in self?.onStart?() }
-            } else if !pressed && isDown {
-                isDown = false
-                DispatchQueue.main.async { [weak self] in self?.onStop?() }
-            }
+            return false
         }
 
+        let pressed = event.flags.rawValue & modifierFlagBit(for: shortcutKey) != 0
+        let actions: [HotkeyAction]
+        if pressed {
+            actions = stateMachine.handleModifierDown(at: now, isSystemRecording: isRecording?() ?? false)
+        } else {
+            actions = stateMachine.handleModifierUp(at: now)
+        }
+        scheduleDeadlineIfNeeded()
+        dispatch(actions)
         return false
     }
 
-    private func modifierFlagBit(for keyCode: CGKeyCode) -> UInt64 {
-        switch keyCode {
-        case 61, 58: return CGEventFlags.maskAlternate.rawValue
-        case 54, 55: return CGEventFlags.maskCommand.rawValue
-        case 62, 59: return CGEventFlags.maskControl.rawValue
-        case 60, 56: return CGEventFlags.maskShift.rawValue
-        default: return 0
+    private func scheduleDeadlineIfNeeded() {
+        cancelDeadlineWorkItem()
+        guard let deadline = stateMachine.nextDeadline else { return }
+        let delay = max(0.005, deadline - ProcessInfo.processInfo.systemUptime)
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            let actions = self.stateMachine.tick(at: now)
+            self.scheduleDeadlineIfNeeded()
+            self.dispatch(actions)
+        }
+        deadlineWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func cancelDeadlineWorkItem() {
+        deadlineWorkItem?.cancel()
+        deadlineWorkItem = nil
+    }
+
+    private func dispatch(_ actions: [HotkeyAction]) {
+        guard !actions.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            for action in actions {
+                switch action {
+                case .startRecording:
+                    self.onStart?()
+                case .stopRecording:
+                    self.onStop?()
+                case .cancelRecording:
+                    self.onCancel?()
+                }
+            }
+        }
+    }
+
+    private func modifierFlagBit(for key: ShortcutKey) -> UInt64 {
+        switch key {
+        case .option: return CGEventFlags.maskAlternate.rawValue
+        case .command: return CGEventFlags.maskCommand.rawValue
+        case .control: return CGEventFlags.maskControl.rawValue
+        case .shift: return CGEventFlags.maskShift.rawValue
         }
     }
 }

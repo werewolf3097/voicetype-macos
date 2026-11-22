@@ -17,6 +17,8 @@ final class AppState: ObservableObject {
     }
     @Published var selectedSection: DashboardSection? = .home
     @Published var lastText: String = ""
+    @Published var lastTargetApp: String? = nil
+    @Published var lastInsertOutcome: InsertStatus? = nil
     @Published var hotkeyActive: Bool = false
     @Published var microphoneAuthorized: Bool = PermissionsHelper.microphoneAuthorized()
     @Published var inputMonitoringAuthorized: Bool = PermissionsHelper.inputMonitoringAuthorized()
@@ -31,6 +33,7 @@ final class AppState: ObservableObject {
 
     let settings: SettingsStore
     let history: HistoryStore
+    let dictionary: DictionaryStore
     let meetings: MeetingsStore
     private let recorder = AudioRecorder()
     private let meetingRecorder = MeetingAudioRecorder()
@@ -53,13 +56,18 @@ final class AppState: ObservableObject {
         case needsRelaunch
     }
 
-    init(settings: SettingsStore, history: HistoryStore, meetings: MeetingsStore? = nil) {
+    init(
+        settings: SettingsStore,
+        history: HistoryStore,
+        dictionary: DictionaryStore? = nil,
+        meetings: MeetingsStore? = nil
+    ) {
         self.settings = settings
         self.history = history
+        self.dictionary = dictionary ?? DictionaryStore()
         self.meetings = meetings ?? MeetingsStore()
         hotkeys.onStart = { [weak self] in self?.beginRecording() }
         hotkeys.onStop = { [weak self] in self?.finishRecording() }
-        hotkeys.onToggle = { [weak self] in self?.toggleRecording() }
         hotkeys.onCancel = { [weak self] in self?.cancelRecording() }
         hotkeys.isRecording = { [weak self] in
             switch self?.status {
@@ -136,12 +144,12 @@ final class AppState: ObservableObject {
         if accessibilityAuthorized != ax { accessibilityAuthorized = ax }
         if screenCaptureAuthorized != sc { screenCaptureAuthorized = sc }
 
-        hotkeys.mode = settings.recordingMode
+        hotkeys.mode = settings.shortcutMode
 
         // Don't interrupt an active recording
         guard status != .recording else { return }
 
-        let keyChanged = hotkeys.targetKeyCode != settings.hotkey.keyCode
+        let keyChanged = hotkeys.shortcutKey != settings.shortcutKey || hotkeys.shortcutSide != settings.shortcutSide
         let swallowUpgradeAvailable = ax && !hotkeys.canSwallowEvents
         let needsStart = forceRestartTap || !hotkeys.isActive || keyChanged || swallowUpgradeAvailable || permissionsChanged
 
@@ -151,8 +159,9 @@ final class AppState: ObservableObject {
     }
 
     func restartHotkeyListener() {
-        hotkeys.targetKeyCode = settings.hotkey.keyCode
-        hotkeys.mode = settings.recordingMode
+        hotkeys.shortcutKey = settings.shortcutKey
+        hotkeys.shortcutSide = settings.shortcutSide
+        hotkeys.mode = settings.shortcutMode
         let tapStarted = hotkeys.start()
         // CGEvent.tapCreate can report success and still never receive a single real
         // key event when Input Monitoring (or Accessibility) isn't actually granted.
@@ -192,14 +201,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func toggleRecording() {
-        if status == .recording {
-            finishRecording()
-        } else if status == .idle || isError {
-            beginRecording()
-        }
-    }
-
     private func beginRecording() {
         guard status == .idle || isError else { return }
 
@@ -208,6 +209,7 @@ final class AppState: ObservableObject {
             PermissionsHelper.requestMicrophone { [weak self] granted in
                 guard let self else { return }
                 self.microphoneAuthorized = granted
+                self.hotkeys.notifyRecordingEndedExternally()
                 if !granted {
                     self.status = .error("Нет доступа к микрофону. Разрешите в Настройках.")
                 }
@@ -215,6 +217,7 @@ final class AppState: ObservableObject {
             return
         case .denied, .restricted:
             microphoneAuthorized = false
+            hotkeys.notifyRecordingEndedExternally()
             status = .error("Нет доступа к микрофону. Разрешите в Настройках.")
             return
         case .authorized:
@@ -228,6 +231,7 @@ final class AppState: ObservableObject {
             recordingStartedAt = Date()
             status = .recording
         } catch {
+            hotkeys.notifyRecordingEndedExternally()
             status = .error("Не удалось начать запись: \(error.localizedDescription)")
         }
     }
@@ -238,6 +242,7 @@ final class AppState: ObservableObject {
         recordingStartedAt = nil
 
         guard let fileURL = recorder.stop() else {
+            hotkeys.notifyRecordingEndedExternally()
             status = .idle
             return
         }
@@ -260,7 +265,16 @@ final class AppState: ObservableObject {
         dictationTask?.cancel()
         dictationTask = nil
         recorder.cancel()
+        hotkeys.notifyRecordingEndedExternally()
         status = .idle
+    }
+
+    private func currentTargetAppName() -> String? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        if app.bundleIdentifier == Bundle.main.bundleIdentifier {
+            return app.localizedName
+        }
+        return app.localizedName
     }
 
     private func transcribeAndInsert(fileURL: URL, durationSeconds: Double) async {
@@ -272,7 +286,10 @@ final class AppState: ObservableObject {
         if settings.useHomeServer {
             let gatewayToken = settings.homeServerToken.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !gatewayToken.isEmpty else {
-                status = .error("Не задан токен домашнего сервера. Откройте настройки.")
+                let message = "Не задан токен домашнего сервера. Откройте настройки."
+                history.add(text: "", durationSeconds: durationSeconds, status: .failed, targetApp: currentTargetAppName(), errorMessage: message, style: settings.cleanupStyle)
+                hotkeys.notifyRecordingEndedExternally()
+                status = .error(message)
                 return
             }
             let homeProvider = HomeServerProvider(config: settings.homeServerConfig)
@@ -290,7 +307,10 @@ final class AppState: ObservableObject {
             }
         } else {
             guard !gapiToken.isEmpty else {
-                status = .error("Не задан токен gapi. Откройте настройки.")
+                let message = "Не задан токен gapi. Откройте настройки."
+                history.add(text: "", durationSeconds: durationSeconds, status: .failed, targetApp: currentTargetAppName(), errorMessage: message, style: settings.cleanupStyle)
+                hotkeys.notifyRecordingEndedExternally()
+                status = .error(message)
                 return
             }
             coordinator = DictationTranscriptionCoordinator(
@@ -302,41 +322,149 @@ final class AppState: ObservableObject {
             try Task.checkCancellation()
             let result = try await coordinator.transcribe(fileURL: fileURL)
             try Task.checkCancellation()
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            guard !text.isEmpty else {
-                status = .idle
+            let rawText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !rawText.isEmpty else {
+                let silenceReason = "Не удалось распознать (тишина)"
+                history.add(
+                    text: "",
+                    durationSeconds: durationSeconds,
+                    status: .failed,
+                    targetApp: currentTargetAppName(),
+                    errorMessage: silenceReason,
+                    style: settings.cleanupStyle,
+                    languageCode: result.languageCode,
+                    languageSummary: result.languageSummary,
+                    engine: result.engine,
+                    latencyMs: result.latencyMs
+                )
+                hotkeys.notifyRecordingEndedExternally()
+                status = .error(silenceReason)
                 return
             }
 
+            // Применяем локальный словарь замен «слышится → пишется»
+            var finalText = dictionary.apply(to: rawText)
+            let activeStyle = settings.cleanupStyle
+            let anthropicKey = settings.anthropicApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if activeStyle != .off && !anthropicKey.isEmpty {
+                status = .cleaning
+                let inputForClaude = GapiTranscription(
+                    text: finalText,
+                    languageCode: result.languageCode,
+                    languageConfidence: nil,
+                    languageShare: nil,
+                    segments: [],
+                    audioSeconds: result.audioSeconds
+                )
+                finalText = try await ClaudeClient(apiKey: anthropicKey).cleanup(
+                    transcription: inputForClaude,
+                    style: activeStyle,
+                    uzbekStyle: settings.uzbekStyle
+                )
+                finalText = dictionary.apply(to: finalText)
+            }
+
+            try Task.checkCancellation()
             guard !Task.isCancelled else { return }
 
-            lastText = text
+            let targetApp = currentTargetAppName()
+            let insertOutcome = TextInjector.insert(
+                text: finalText,
+                mode: settings.pasteMode,
+                restoreClipboard: settings.restoreClipboard
+            )
+
+            lastText = finalText
+            lastTargetApp = targetApp
+            lastInsertOutcome = insertOutcome
+
             history.add(
-                text: text,
+                text: finalText,
                 durationSeconds: durationSeconds,
+                status: insertOutcome,
+                targetApp: targetApp,
+                style: activeStyle,
                 languageCode: result.languageCode,
                 languageSummary: result.languageSummary,
                 engine: result.engine,
                 latencyMs: result.latencyMs
             )
-            TextInjector.copyToClipboard(text)
-            if settings.autoPaste {
-                if PermissionsHelper.accessibilityAuthorized() {
-                    if TextInjector.canPasteIntoFocusedField() {
-                        TextInjector.pasteAtCursor()
-                    }
-                } else {
-                    _ = PermissionsHelper.requestAccessibility(prompt: true)
-                }
-            }
+            hotkeys.notifyRecordingEndedExternally()
             status = .idle
         } catch is CancellationError {
+            hotkeys.notifyRecordingEndedExternally()
             return
         } catch let error as URLError where error.code == .cancelled {
+            hotkeys.notifyRecordingEndedExternally()
             return
         } catch {
             guard !Task.isCancelled else { return }
+            let message = error.localizedDescription
+            history.add(
+                text: "",
+                durationSeconds: durationSeconds,
+                status: .failed,
+                targetApp: currentTargetAppName(),
+                errorMessage: message,
+                style: settings.cleanupStyle
+            )
+            hotkeys.notifyRecordingEndedExternally()
+            status = .error(message)
+        }
+    }
+
+    @discardableResult
+    func insertTextAgain(_ text: String) -> InsertStatus {
+        let targetApp = currentTargetAppName()
+        let outcome = TextInjector.insert(
+            text: text,
+            mode: settings.pasteMode,
+            restoreClipboard: settings.restoreClipboard
+        )
+        lastTargetApp = targetApp
+        lastInsertOutcome = outcome
+        return outcome
+    }
+
+    func reprocessRecord(_ recordID: UUID, with style: CleanupStyle) async {
+        guard let record = history.records.first(where: { $0.id == recordID }),
+              !record.text.isEmpty else { return }
+        let anthropicKey = settings.anthropicApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !anthropicKey.isEmpty, style != .off else { return }
+
+        let input = GapiTranscription(
+            text: record.text,
+            languageCode: record.languageCode,
+            languageConfidence: nil,
+            languageShare: nil,
+            segments: []
+        )
+        do {
+            let cleaned = try await ClaudeClient(apiKey: anthropicKey).cleanup(
+                transcription: input,
+                style: style,
+                uzbekStyle: settings.uzbekStyle
+            )
+            let final = dictionary.apply(to: cleaned)
+            history.update(id: recordID) { item in
+                item = TranscriptionRecord(
+                    id: item.id,
+                    date: item.date,
+                    text: final,
+                    durationSeconds: item.durationSeconds,
+                    status: item.status,
+                    targetApp: item.targetApp,
+                    errorMessage: nil,
+                    style: style,
+                    languageCode: item.languageCode,
+                    languageSummary: item.languageSummary,
+                    engine: item.engine,
+                    latencyMs: item.latencyMs
+                )
+            }
+        } catch {
             status = .error(error.localizedDescription)
         }
     }

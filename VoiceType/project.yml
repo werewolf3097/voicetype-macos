@@ -45,6 +45,14 @@ targets:
       - path: VoiceType/Sources/RussianTransliterator.swift
       - path: VoiceType/Sources/TranscriptionProgress.swift
       - path: VoiceType/Sources/PaperTheme.swift
+      - path: VoiceType/Sources/HotkeyStateMachine.swift
+      - path: VoiceType/Sources/DictionaryStore.swift
+      - path: VoiceType/Sources/TextInjector.swift
+      - path: VoiceType/Sources/SettingsStore.swift
+      - path: VoiceType/Sources/KeychainStore.swift
+      - path: VoiceType/Sources/DockIconController.swift
+      - path: VoiceType/Sources/UzbekDialectConverter.swift
+      - path: VoiceType/Sources/PermissionsHelper.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farrukh.voicetype.tests

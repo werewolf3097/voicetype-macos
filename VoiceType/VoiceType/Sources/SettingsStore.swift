@@ -1,31 +1,35 @@
 import Foundation
 import CoreGraphics
 
-enum PushToTalkKey: String, CaseIterable, Identifiable {
-    case rightOption = "Right Option"
-    case rightCommand = "Right Command"
-    case rightControl = "Right Control"
-    case rightShift = "Right Shift"
-
-    var id: String { rawValue }
-
-    var keyCode: CGKeyCode {
-        switch self {
-        case .rightOption: return 61
-        case .rightCommand: return 54
-        case .rightControl: return 62
-        case .rightShift: return 60
-        }
-    }
-}
-
-enum CleanupStyle: String, CaseIterable, Identifiable {
+enum CleanupStyle: String, CaseIterable, Identifiable, Codable, Sendable {
     case off = "Без LLM-обработки"
     case grammar = "Умная коррекция (Typeless)"
     case notes = "Заметка"
     case message = "Сообщение/письмо"
 
     var id: String { rawValue }
+
+    var shortTitle: String {
+        switch self {
+        case .off: return "Без обработки"
+        case .grammar: return "Аккуратно"
+        case .notes: return "Заметка"
+        case .message: return "Сообщение"
+        }
+    }
+
+    var oneLineDescription: String {
+        switch self {
+        case .off:
+            return "Без обработки: вставит текст так, как он распознан."
+        case .grammar:
+            return "Аккуратно: расставит знаки и уберёт «э-э», смысл не меняет."
+        case .notes:
+            return "Заметка: очистит оговорки и оформит тезисы или абзацы."
+        case .message:
+            return "Сообщение: приведёт речь к связному тексту для чата или письма."
+        }
+    }
 
     var systemPrompt: String? {
         switch self {
@@ -49,17 +53,24 @@ enum CleanupStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum PasteMode: String, CaseIterable, Identifiable, Codable, Sendable {
+    case autoPaste = "Автовставка (⌘V)"
+    case clipboardOnly = "Только в буфер"
+
+    var id: String { rawValue }
+
+    var shortTitle: String {
+        switch self {
+        case .autoPaste: return "Автовставка"
+        case .clipboardOnly: return "Только в буфер"
+        }
+    }
+}
+
 enum AppearanceMode: String, CaseIterable, Identifiable {
     case system = "Как в системе"
     case light = "Светлая"
     case dark = "Тёмная"
-
-    var id: String { rawValue }
-}
-
-enum RecordingMode: String, CaseIterable, Identifiable {
-    case toggle = "По нажатию (старт / стоп)"
-    case hold = "По удержанию (push-to-talk)"
 
     var id: String { rawValue }
 }
@@ -96,86 +107,120 @@ enum MeetingAudioRetention: String, CaseIterable, Identifiable, Codable {
 }
 
 final class SettingsStore: ObservableObject {
-    @Published var hotkey: PushToTalkKey {
-        didSet { UserDefaults.standard.set(hotkey.rawValue, forKey: "hotkey") }
+    private let defaults: UserDefaults
+    private let persistSecrets: Bool
+    private let syncDockIcon: Bool
+
+    @Published var shortcutKey: ShortcutKey {
+        didSet { defaults.set(shortcutKey.rawValue, forKey: "shortcutKey") }
     }
-    @Published var recordingMode: RecordingMode {
-        didSet { UserDefaults.standard.set(recordingMode.rawValue, forKey: "recordingMode") }
+    @Published var shortcutSide: ShortcutSide {
+        didSet { defaults.set(shortcutSide.rawValue, forKey: "shortcutSide") }
     }
-    @Published var autoPaste: Bool {
-        didSet { UserDefaults.standard.set(autoPaste, forKey: "autoPaste") }
+    @Published var shortcutMode: ShortcutMode {
+        didSet { defaults.set(shortcutMode.rawValue, forKey: "shortcutMode") }
+    }
+    @Published var pasteMode: PasteMode {
+        didSet { defaults.set(pasteMode.rawValue, forKey: "pasteMode") }
+    }
+    @Published var restoreClipboard: Bool {
+        didSet { defaults.set(restoreClipboard, forKey: "restoreClipboard") }
     }
     @Published var cleanupStyle: CleanupStyle {
-        didSet { UserDefaults.standard.set(cleanupStyle.rawValue, forKey: "cleanupStyle") }
+        didSet { defaults.set(cleanupStyle.rawValue, forKey: "cleanupStyle") }
     }
     @Published var uzbekStyle: UzbekStyle {
-        didSet { UserDefaults.standard.set(uzbekStyle.rawValue, forKey: "uzbekStyle") }
+        didSet { defaults.set(uzbekStyle.rawValue, forKey: "uzbekStyle") }
     }
     @Published var appearance: AppearanceMode {
-        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "appearance") }
+        didSet { defaults.set(appearance.rawValue, forKey: "appearance") }
     }
     @Published var paperThemeID: String {
-        didSet { UserDefaults.standard.set(paperThemeID, forKey: "paperThemeID") }
+        didSet { defaults.set(paperThemeID, forKey: "paperThemeID") }
     }
     @Published var paperDepth: Double {
-        didSet { UserDefaults.standard.set(paperDepth, forKey: "paperDepth") }
+        didSet { defaults.set(paperDepth, forKey: "paperDepth") }
     }
     @Published var paperGrainIntensity: Double {
-        didSet { UserDefaults.standard.set(paperGrainIntensity, forKey: "paperGrainIntensity") }
+        didSet { defaults.set(paperGrainIntensity, forKey: "paperGrainIntensity") }
     }
     @Published var fontPreset: FontPreset {
-        didSet { UserDefaults.standard.set(fontPreset.rawValue, forKey: "fontPreset") }
+        didSet { defaults.set(fontPreset.rawValue, forKey: "fontPreset") }
     }
     @Published var showDockIcon: Bool {
         didSet {
-            UserDefaults.standard.set(showDockIcon, forKey: "showDockIcon")
-            DockIconController.apply(visible: showDockIcon)
+            defaults.set(showDockIcon, forKey: "showDockIcon")
+            if syncDockIcon {
+                DockIconController.apply(visible: showDockIcon)
+            }
         }
     }
     @Published var meetingAudioSource: MeetingAudioSource {
-        didSet { UserDefaults.standard.set(meetingAudioSource.rawValue, forKey: "meetingAudioSource") }
+        didSet { defaults.set(meetingAudioSource.rawValue, forKey: "meetingAudioSource") }
     }
     @Published var enableGapiSummary: Bool {
-        didSet { UserDefaults.standard.set(enableGapiSummary, forKey: "enableGapiSummary") }
+        didSet { defaults.set(enableGapiSummary, forKey: "enableGapiSummary") }
     }
     @Published var meetingAudioRetention: MeetingAudioRetention {
         didSet {
-            UserDefaults.standard.set(meetingAudioRetention.rawValue, forKey: "meetingAudioRetention")
-            UserDefaults.standard.set(meetingAudioRetention != .deleteAfterTranscription, forKey: "keepMeetingAudio")
+            defaults.set(meetingAudioRetention.rawValue, forKey: "meetingAudioRetention")
+            defaults.set(meetingAudioRetention != .deleteAfterTranscription, forKey: "keepMeetingAudio")
         }
     }
     @Published var whisperServerURL: String {
-        didSet { UserDefaults.standard.set(whisperServerURL, forKey: "whisperServerURL") }
+        didSet { defaults.set(whisperServerURL, forKey: "whisperServerURL") }
     }
     @Published var exportDestination: String {
-        didSet { UserDefaults.standard.set(exportDestination, forKey: "exportDestination") }
+        didSet { defaults.set(exportDestination, forKey: "exportDestination") }
     }
     @Published var useHomeServer: Bool {
-        didSet { UserDefaults.standard.set(useHomeServer, forKey: "useHomeServer") }
+        didSet { defaults.set(useHomeServer, forKey: "useHomeServer") }
     }
     @Published var homeServerURL: String {
-        didSet { UserDefaults.standard.set(homeServerURL, forKey: "homeServerURL") }
+        didSet { defaults.set(homeServerURL, forKey: "homeServerURL") }
     }
     @Published var homeServerEngine: HomeServerEngine {
-        didSet { UserDefaults.standard.set(homeServerEngine.rawValue, forKey: "homeServerEngine") }
+        didSet { defaults.set(homeServerEngine.rawValue, forKey: "homeServerEngine") }
     }
     @Published var homeServerLanguage: HomeServerLanguage {
-        didSet { UserDefaults.standard.set(homeServerLanguage.rawValue, forKey: "homeServerLanguage") }
+        didSet { defaults.set(homeServerLanguage.rawValue, forKey: "homeServerLanguage") }
     }
 
     @Published var gapiToken: String {
-        didSet { KeychainStore.set(gapiToken, forKey: "gapiToken") }
+        didSet {
+            guard persistSecrets else { return }
+            KeychainStore.set(gapiToken, forKey: "gapiToken")
+        }
     }
     @Published var anthropicApiKey: String {
-        didSet { KeychainStore.set(anthropicApiKey, forKey: "anthropicApiKey") }
+        didSet {
+            guard persistSecrets else { return }
+            KeychainStore.set(anthropicApiKey, forKey: "anthropicApiKey")
+        }
     }
     @Published var homeServerToken: String {
         didSet {
+            guard persistSecrets else { return }
             if homeServerToken.isEmpty {
                 KeychainStore.delete("homeServerToken")
             } else {
                 KeychainStore.set(homeServerToken, forKey: "homeServerToken")
             }
+        }
+    }
+
+    var autoPaste: Bool {
+        pasteMode == .autoPaste
+    }
+
+    var shortcutDisplayLabel: String {
+        switch shortcutSide {
+        case .either:
+            return shortcutKey.displayName
+        case .left:
+            return "Левый \(shortcutKey.displayName)"
+        case .right:
+            return "Правый \(shortcutKey.displayName)"
         }
     }
 
@@ -200,11 +245,56 @@ final class SettingsStore: ObservableObject {
         )
     }
 
-    init() {
-        let defaults = UserDefaults.standard
-        self.hotkey = PushToTalkKey(rawValue: defaults.string(forKey: "hotkey") ?? "") ?? .rightOption
-        self.recordingMode = RecordingMode(rawValue: defaults.string(forKey: "recordingMode") ?? "") ?? .toggle
-        self.autoPaste = defaults.object(forKey: "autoPaste") as? Bool ?? true
+    init(
+        defaults: UserDefaults = .standard,
+        persistSecrets: Bool = true,
+        syncDockIcon: Bool = true
+    ) {
+        self.defaults = defaults
+        self.persistSecrets = persistSecrets
+        self.syncDockIcon = syncDockIcon
+
+        // Миграция прежнего ключа `hotkey` ("Right Option" и т.д.) -> (ShortcutKey, ShortcutSide)
+        if let rawKey = defaults.string(forKey: "shortcutKey"),
+           let parsedKey = ShortcutKey(rawValue: rawKey) {
+            self.shortcutKey = parsedKey
+            self.shortcutSide = ShortcutSide(rawValue: defaults.string(forKey: "shortcutSide") ?? "") ?? .either
+        } else if let legacyHotkey = defaults.string(forKey: "hotkey"),
+                  let migrated = Self.migrateLegacyHotkey(legacyHotkey) {
+            self.shortcutKey = migrated.0
+            self.shortcutSide = migrated.1
+            defaults.set(migrated.0.rawValue, forKey: "shortcutKey")
+            defaults.set(migrated.1.rawValue, forKey: "shortcutSide")
+        } else {
+            self.shortcutKey = .option
+            self.shortcutSide = .either
+        }
+
+        // Миграция `recordingMode` -> `shortcutMode`
+        if let rawMode = defaults.string(forKey: "shortcutMode"),
+           let parsedMode = ShortcutMode(rawValue: rawMode) {
+            self.shortcutMode = parsedMode
+        } else if let legacyMode = defaults.string(forKey: "recordingMode") {
+            let migratedMode = Self.migrateLegacyRecordingMode(legacyMode)
+            self.shortcutMode = migratedMode
+            defaults.set(migratedMode.rawValue, forKey: "shortcutMode")
+        } else {
+            self.shortcutMode = .holdOrDoubleTap
+        }
+
+        // Миграция `autoPaste` -> `pasteMode`
+        if let rawPaste = defaults.string(forKey: "pasteMode"),
+           let parsedPaste = PasteMode(rawValue: rawPaste) {
+            self.pasteMode = parsedPaste
+        } else if let legacyAutoPaste = defaults.object(forKey: "autoPaste") as? Bool {
+            let migratedPaste: PasteMode = legacyAutoPaste ? .autoPaste : .clipboardOnly
+            self.pasteMode = migratedPaste
+            defaults.set(migratedPaste.rawValue, forKey: "pasteMode")
+        } else {
+            self.pasteMode = .autoPaste
+        }
+
+        self.restoreClipboard = defaults.object(forKey: "restoreClipboard") as? Bool ?? true
         self.cleanupStyle = CleanupStyle(rawValue: defaults.string(forKey: "cleanupStyle") ?? "") ?? .grammar
         self.uzbekStyle = UzbekStyle(rawValue: defaults.string(forKey: "uzbekStyle") ?? "") ?? .tashkent
         self.appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
@@ -212,7 +302,8 @@ final class SettingsStore: ObservableObject {
         self.paperDepth = defaults.object(forKey: "paperDepth") as? Double ?? 0.6
         self.paperGrainIntensity = defaults.object(forKey: "paperGrainIntensity") as? Double ?? 0.8
         self.fontPreset = FontPreset(rawValue: defaults.string(forKey: "fontPreset") ?? "") ?? .paperNewYork
-        self.showDockIcon = defaults.object(forKey: "showDockIcon") as? Bool ?? true
+        let dockVisible = defaults.object(forKey: "showDockIcon") as? Bool ?? true
+        self.showDockIcon = dockVisible
         self.meetingAudioSource = MeetingAudioSource(rawValue: defaults.string(forKey: "meetingAudioSource") ?? "") ?? .micAndSystem
         self.enableGapiSummary = defaults.object(forKey: "enableGapiSummary") as? Bool ?? false
         if let rawRetention = defaults.string(forKey: "meetingAudioRetention"),
@@ -231,9 +322,41 @@ final class SettingsStore: ObservableObject {
         self.homeServerURL = defaults.string(forKey: "homeServerURL") ?? HomeServerConfig.defaultURLString
         self.homeServerEngine = HomeServerEngine(rawValue: defaults.string(forKey: "homeServerEngine") ?? "") ?? .auto
         self.homeServerLanguage = HomeServerLanguage(rawValue: defaults.string(forKey: "homeServerLanguage") ?? "") ?? .auto
-        self.gapiToken = KeychainStore.get("gapiToken") ?? ""
-        self.anthropicApiKey = KeychainStore.get("anthropicApiKey") ?? ""
-        self.homeServerToken = KeychainStore.get("homeServerToken") ?? ""
-        DockIconController.apply(visible: self.showDockIcon)
+
+        if persistSecrets {
+            self.gapiToken = KeychainStore.get("gapiToken") ?? ""
+            self.anthropicApiKey = KeychainStore.get("anthropicApiKey") ?? ""
+            self.homeServerToken = KeychainStore.get("homeServerToken") ?? ""
+        } else {
+            self.gapiToken = ""
+            self.anthropicApiKey = ""
+            self.homeServerToken = ""
+        }
+
+        if syncDockIcon {
+            DockIconController.apply(visible: dockVisible)
+        }
+    }
+
+    static func migrateLegacyHotkey(_ rawValue: String) -> (ShortcutKey, ShortcutSide)? {
+        switch rawValue {
+        case "Right Option": return (.option, .right)
+        case "Right Command": return (.command, .right)
+        case "Right Control": return (.control, .right)
+        case "Right Shift": return (.shift, .right)
+        case "Left Option": return (.option, .left)
+        case "Left Command": return (.command, .left)
+        case "Left Control": return (.control, .left)
+        case "Left Shift": return (.shift, .left)
+        default: return nil
+        }
+    }
+
+    static func migrateLegacyRecordingMode(_ rawValue: String) -> ShortcutMode {
+        switch rawValue {
+        case "По нажатию (старт / стоп)": return .toggle
+        case "По удержанию (push-to-talk)": return .hold
+        default: return .holdOrDoubleTap
+        }
     }
 }
