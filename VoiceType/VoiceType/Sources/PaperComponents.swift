@@ -36,33 +36,19 @@ private struct PaperSurfaceModifier: ViewModifier {
                     shape
                         .fill(theme.insetColor)
                         .overlay(
-                            // Inner top-left shadow + subtle bottom highlight
                             shape
                                 .strokeBorder(
                                     LinearGradient(
                                         colors: [
-                                            theme.shadowRGB.color.opacity(theme.isDark ? 0.55 : 0.16 * (0.4 + 0.6 * scaledDepth)),
-                                            Color.clear,
-                                            theme.subtleHighlightColor.opacity(0.6)
+                                            theme.shadowRGB.color.opacity(theme.isDark ? 0.50 : 0.16 * (0.4 + 0.6 * scaledDepth)),
+                                            theme.borderColor
                                         ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
+                                        startPoint: .top,
+                                        endPoint: .bottom
                                     ),
-                                    lineWidth: 1
+                                    lineWidth: 0.8
                                 )
                         )
-                        .overlay(alignment: .top) {
-                            LinearGradient(
-                                colors: [
-                                    theme.shadowRGB.color.opacity(theme.isDark ? 0.28 : 0.08 * scaledDepth),
-                                    Color.clear
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: 5)
-                            .clipShape(shape)
-                        }
 
                 case .l2OnPaper:
                     shape
@@ -200,22 +186,53 @@ struct PaperBackground: View {
 // MARK: - Section Tile Icon
 
 struct PaperSectionTile: View {
+    @Environment(\.paperTheme) private var theme
+
     let systemImage: String
     let tint: Color
     var size: CGFloat = 28
     var iconSize: CGFloat = 13
 
+    private var resolvedForeground: Color {
+        guard theme.isDark else { return tint }
+        if tint == PaperTokens.settingsSlate {
+            return Color(red: 0.82, green: 0.80, blue: 0.74)
+        }
+        if tint == PaperTokens.dictationBlue {
+            return Color(red: 0.45, green: 0.67, blue: 1.0)
+        }
+        if tint == PaperTokens.historyGreen {
+            return Color(red: 0.42, green: 0.84, blue: 0.52)
+        }
+        if tint == PaperTokens.dictionaryTeal {
+            return Color(red: 0.38, green: 0.82, blue: 0.82)
+        }
+        if tint == PaperTokens.meetingsIndigo {
+            return Color(red: 0.59, green: 0.66, blue: 0.96)
+        }
+        return tint
+    }
+
+    private var resolvedFill: Color {
+        theme.isDark ? resolvedForeground.opacity(0.18) : tint.opacity(0.14)
+    }
+
+    private var resolvedBorder: Color {
+        theme.isDark ? resolvedForeground.opacity(0.32) : tint.opacity(0.24)
+    }
+
     var body: some View {
-        RoundedRectangle(cornerRadius: size <= 24 ? PaperTokens.chipRadius : PaperTokens.controlRadius, style: .continuous)
-            .fill(tint.opacity(0.14))
+        let corner = size <= 24 ? PaperTokens.chipRadius : PaperTokens.controlRadius
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(resolvedFill)
             .overlay(
-                RoundedRectangle(cornerRadius: size <= 24 ? PaperTokens.chipRadius : PaperTokens.controlRadius, style: .continuous)
-                    .strokeBorder(tint.opacity(0.24), lineWidth: PaperTokens.hairline)
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(resolvedBorder, lineWidth: PaperTokens.hairline)
             )
             .overlay(
                 Image(systemName: systemImage)
                     .font(.system(size: iconSize, weight: .medium))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(resolvedForeground)
             )
             .frame(width: size, height: size)
             .accessibilityHidden(true)
@@ -400,6 +417,13 @@ struct PaperToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         let isOn = configuration.isOn
         let scaledDepth = min(1, max(0, depth))
+        let trackFill: Color = isOn
+            ? theme.successColor
+            : (theme.isDark ? Color.black.opacity(0.32) : theme.insetColor)
+        let trackBorder: Color = isOn
+            ? theme.successColor.opacity(0.85)
+            : theme.borderColor
+        let thumbFill: Color = Color.white
 
         HStack(spacing: 8) {
             configuration.label
@@ -411,26 +435,26 @@ struct PaperToggleStyle: ToggleStyle {
             } label: {
                 ZStack(alignment: isOn ? .trailing : .leading) {
                     Capsule(style: .continuous)
-                        .fill(isOn ? theme.inkColor : theme.insetColor)
+                        .fill(trackFill)
                         .overlay(
                             Capsule(style: .continuous)
-                                .strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
+                                .strokeBorder(trackBorder, lineWidth: PaperTokens.hairline)
                         )
-                        .frame(width: 36, height: 20)
+                        .frame(width: 38, height: 22)
 
                     Circle()
-                        .fill(isOn ? theme.baseColor : theme.surfaceColor)
+                        .fill(thumbFill)
                         .overlay(
                             Circle()
-                                .strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
+                                .strokeBorder(Color.black.opacity(0.10), lineWidth: PaperTokens.hairline)
                         )
                         .shadow(
-                            color: theme.shadowRGB.color.opacity(0.22 * scaledDepth),
+                            color: Color.black.opacity(0.24 * (0.3 + 0.7 * scaledDepth)),
                             radius: 1.5 * scaledDepth + 0.5,
-                            x: 0.4 * scaledDepth,
+                            x: 0.3 * scaledDepth,
                             y: 1 * scaledDepth
                         )
-                        .frame(width: 16, height: 16)
+                        .frame(width: 18, height: 18)
                         .padding(2)
                 }
                 .contentShape(Rectangle())
@@ -472,6 +496,7 @@ struct PaperSegmentedControl<SelectionValue: Hashable>: View {
     var body: some View {
         let fonts = PaperFonts(preset: fontPreset)
         let scaledDepth = min(1, max(0, depth))
+        let trackFill = theme.isDark ? Color.black.opacity(0.30) : theme.insetColor
 
         HStack(spacing: 2) {
             ForEach(options) { option in
@@ -485,14 +510,14 @@ struct PaperSegmentedControl<SelectionValue: Hashable>: View {
                         .font(compact ? fonts.captionMedium : fonts.uiMedium)
                         .lineLimit(1)
                         .foregroundStyle(isSelected ? theme.primaryButtonForeground : theme.secondaryInkColor)
-                        .padding(.horizontal, compact ? 9 : 11)
-                        .padding(.vertical, compact ? 4 : 5)
+                        .padding(.horizontal, compact ? 10 : 12)
+                        .padding(.vertical, compact ? 4.5 : 5.5)
                         .background {
                             if isSelected {
                                 Capsule(style: .continuous)
                                     .fill(theme.primaryButtonBackground)
                                     .shadow(
-                                        color: theme.shadowRGB.color.opacity(0.20 * scaledDepth),
+                                        color: theme.shadowRGB.color.opacity(0.22 * scaledDepth),
                                         radius: 2 * scaledDepth + 0.5,
                                         y: 1 * scaledDepth
                                     )
@@ -504,14 +529,22 @@ struct PaperSegmentedControl<SelectionValue: Hashable>: View {
             }
         }
         .padding(3)
-        .paperSurface(level: .l1Inset, cornerRadius: 999)
+        .background(
+            Capsule(style: .continuous)
+                .fill(trackFill)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
+        )
     }
 }
 
-// MARK: - Setting Group & Setting Row (flat content, volume only on controls)
+// MARK: - Setting Group & Setting Row (clear separation on all papers)
 
 struct PaperSettingGroup<Content: View>: View {
     @Environment(\.paperTheme) private var theme
+    @Environment(\.paperDepth) private var depth
     @Environment(\.paperFontPreset) private var fontPreset
 
     let title: String
@@ -524,6 +557,11 @@ struct PaperSettingGroup<Content: View>: View {
 
     var body: some View {
         let fonts = PaperFonts(preset: fontPreset)
+        let cardFill = theme.isDark
+            ? theme.surfaceColor.opacity(0.92)
+            : theme.surfaceColor.opacity(0.84)
+        let shape = RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
+
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(fonts.captionMedium)
@@ -533,10 +571,14 @@ struct PaperSettingGroup<Content: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 content
             }
-            .background(theme.surfaceColor.opacity(0.55), in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous))
+            .background(cardFill, in: shape)
             .overlay(
-                RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
-                    .strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
+                shape.strokeBorder(theme.borderColor, lineWidth: 0.75)
+            )
+            .shadow(
+                color: theme.shadowRGB.color.opacity((theme.isDark ? 0.30 : 0.06) * min(1, max(0, depth))),
+                radius: 6,
+                y: 2
             )
         }
     }
@@ -567,19 +609,12 @@ struct PaperSettingRow<Control: View>: View {
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 14) {
-                labelColumn
-                    .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
-                control
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                labelColumn
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                control
-            }
+        HStack(alignment: .center, spacing: 16) {
+            labelColumn
+                .frame(maxWidth: .infinity, alignment: .leading)
+            control
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

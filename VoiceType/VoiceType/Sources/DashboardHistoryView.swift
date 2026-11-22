@@ -195,12 +195,12 @@ struct DashboardHistoryView: View {
                                     }
                                 }
                                 .background(
-                                    paperTheme.surfaceColor.opacity(0.45),
+                                    paperTheme.isDark ? paperTheme.surfaceColor.opacity(0.92) : paperTheme.surfaceColor.opacity(0.84),
                                     in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
-                                        .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+                                        .strokeBorder(paperTheme.borderColor, lineWidth: 0.75)
                                 )
                             }
                         }

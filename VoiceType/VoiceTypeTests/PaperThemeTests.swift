@@ -47,9 +47,8 @@ final class PaperThemeTests: XCTestCase {
         XCTAssertTrue(dark.isDark)
     }
 
-    func testLocalProEntitlementDefaultsToFalse() {
-        UserDefaults.standard.removeObject(forKey: "debugOverrideProEntitlement")
+    func testLocalProEntitlementUnlocksAllThemesInTestBuild() {
         let entitlement = LocalProEntitlement()
-        XCTAssertFalse(entitlement.isPro)
+        XCTAssertTrue(entitlement.isPro)
     }
 }

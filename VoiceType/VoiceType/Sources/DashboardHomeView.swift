@@ -86,12 +86,12 @@ struct DashboardHomeView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
-            paperTheme.surfaceColor.opacity(0.55),
+            paperTheme.isDark ? paperTheme.surfaceColor.opacity(0.92) : paperTheme.surfaceColor.opacity(0.84),
             in: RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
-                .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+                .strokeBorder(paperTheme.borderColor, lineWidth: 0.75)
         )
     }
 
@@ -184,12 +184,12 @@ struct DashboardHomeView: View {
         }
         .padding(16)
         .background(
-            paperTheme.surfaceColor.opacity(0.5),
+            paperTheme.isDark ? paperTheme.surfaceColor.opacity(0.92) : paperTheme.surfaceColor.opacity(0.84),
             in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
-                .strokeBorder(paperTheme.borderColor, lineWidth: PaperTokens.hairline)
+                .strokeBorder(paperTheme.borderColor, lineWidth: 0.75)
         )
     }
 

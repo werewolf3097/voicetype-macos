@@ -6,6 +6,8 @@ struct DashboardMeetingsView: View {
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var meetingsStore: MeetingsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.paperTheme) private var paperTheme
+    @Environment(\.paperFontPreset) private var fontPreset
 
     @State private var searchQuery: String = ""
     @State private var detailTab: DetailTab = .recap
@@ -21,7 +23,8 @@ struct DashboardMeetingsView: View {
     @State private var dragStartListWidth: CGFloat? = nil
     @State private var isHoveringDivider: Bool = false
 
-    private var theme: ClaudeTheme { ClaudeTheme(scheme: colorScheme) }
+    private var theme: MeetingsPaperTheme { MeetingsPaperTheme(paper: paperTheme) }
+    private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
     private enum DetailTab: String, CaseIterable, Identifiable {
         case recap = "Рекап и задачи"
@@ -150,7 +153,7 @@ struct DashboardMeetingsView: View {
             VStack(spacing: 9) {
                 HStack(spacing: 8) {
                     Text("Встречи")
-                        .font(ClaudeFonts.panelTitle)
+                        .font(fonts.panelTitle)
                         .tracking(-0.25)
                         .foregroundStyle(theme.ink)
                         .lineLimit(1)
@@ -169,7 +172,7 @@ struct DashboardMeetingsView: View {
                                 Text("Новая")
                             }
                         }
-                        .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                         .help("Начать запись новой встречи")
                     } else {
                         Button {
@@ -181,7 +184,7 @@ struct DashboardMeetingsView: View {
                                     .monospacedDigit()
                             }
                         }
-                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true, tintColor: theme.danger))
+                        .buttonStyle(PaperButtonStyle(role: .destructive, compact: true))
                     }
                 }
 
@@ -190,7 +193,7 @@ struct DashboardMeetingsView: View {
                         .foregroundStyle(theme.secondaryInk)
                     TextField("Поиск по встречам…", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(ClaudeFonts.ui)
+                        .font(fonts.ui)
                         .foregroundStyle(theme.ink)
                     if !searchQuery.isEmpty {
                         Button {
@@ -222,11 +225,11 @@ struct DashboardMeetingsView: View {
                     ClaudeIcon(name: searchQuery.isEmpty ? "person.2" : "magnifyingglass", size: 22, weight: .ultraLight)
                         .foregroundStyle(theme.tertiaryInk)
                     Text(searchQuery.isEmpty ? "Пока нет встреч" : "Ничего не найдено")
-                        .font(ClaudeFonts.uiMedium)
+                        .font(fonts.uiMedium)
                         .foregroundStyle(theme.secondaryInk)
                     if searchQuery.isEmpty {
                         Text("Нажмите «Новая» для старта записи")
-                            .font(ClaudeFonts.small)
+                            .font(fonts.caption)
                             .foregroundStyle(theme.tertiaryInk)
                     }
                     Spacer()
@@ -268,7 +271,7 @@ struct DashboardMeetingsView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(meeting.title)
-                        .font(isSelected ? ClaudeFonts.uiMedium : ClaudeFonts.ui)
+                        .font(isSelected ? fonts.uiMedium : fonts.ui)
                         .foregroundStyle(theme.ink)
                         .lineLimit(1)
 
@@ -284,7 +287,7 @@ struct DashboardMeetingsView: View {
                                 .foregroundStyle(theme.tertiaryInk)
                         }
                     }
-                    .font(ClaudeFonts.micro)
+                    .font(fonts.micro)
                     .foregroundStyle(theme.secondaryInk)
                 }
             }
@@ -368,12 +371,12 @@ struct DashboardMeetingsView: View {
                     .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
 
                 Text("Заметки и рекапы встреч")
-                    .font(ClaudeFonts.pageTitle)
+                    .font(fonts.pageTitle)
                     .tracking(-0.35)
                     .foregroundStyle(theme.ink)
 
                 Text("Записывайте созвоны без ботов в Zoom, Meet или Telegram. Пишите короткие тезисы, а VoiceType разложит речь по спикерам и соберёт структурированный рекап.")
-                    .font(ClaudeFonts.ui)
+                    .font(fonts.ui)
                     .lineSpacing(3)
                     .foregroundStyle(theme.secondaryInk)
                     .multilineTextAlignment(.center)
@@ -396,7 +399,7 @@ struct DashboardMeetingsView: View {
                             Text(tpl.rawValue)
                         }
                     }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                 }
             }
             .frame(maxWidth: 520)
@@ -414,7 +417,7 @@ struct DashboardMeetingsView: View {
                     Text("Начать запись встречи")
                 }
             }
-            .buttonStyle(ClaudePrimaryButtonStyle())
+            .buttonStyle(PaperButtonStyle(role: .primary))
 
             if settings.meetingAudioSource == .micAndSystem && !appState.screenCaptureAuthorized {
                 systemAudioPermissionWarning
@@ -458,12 +461,12 @@ struct DashboardMeetingsView: View {
                 Button("Открыть настройки") {
                     PermissionsHelper.openScreenCaptureSettings()
                 }
-                .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
 
                 Button("Перезапустить") {
                     PermissionsHelper.relaunchApp()
                 }
-                .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+                .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
             }
         }
         .padding(12)
@@ -510,7 +513,7 @@ struct DashboardMeetingsView: View {
                         }
                     )
                 )
-                .font(ClaudeFonts.meetingTitle)
+                .font(fonts.meetingTitle)
                 .tracking(-0.3)
                 .textFieldStyle(.plain)
                 .foregroundStyle(theme.ink)
@@ -521,7 +524,7 @@ struct DashboardMeetingsView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Живой блокнот встречи — короткие тезисы станут каркасом рекапа")
-                    .font(ClaudeFonts.small)
+                    .font(fonts.caption)
                     .foregroundStyle(theme.secondaryInk)
 
                 TextEditor(
@@ -532,7 +535,7 @@ struct DashboardMeetingsView: View {
                         }
                     )
                 )
-                .font(ClaudeFonts.body)
+                .font(fonts.body)
                 .foregroundStyle(theme.ink)
                 .scrollContentBackground(.hidden)
                 .padding(14)
@@ -553,7 +556,7 @@ struct DashboardMeetingsView: View {
                 HStack(spacing: 5) {
                     ClaudeIcon(name: "speaker.wave.2", size: 11, weight: .light)
                     Text("2 канала: Вы + Собеседники")
-                        .font(ClaudeFonts.smallMedium)
+                        .font(fonts.captionMedium)
                 }
                 .foregroundStyle(theme.accentInk)
                 .padding(.horizontal, 8)
@@ -564,7 +567,7 @@ struct DashboardMeetingsView: View {
                 HStack(spacing: 5) {
                     ClaudeIcon(name: "mic", size: 11, weight: .light)
                     Text("Только микрофон (нет системного звука)")
-                        .font(ClaudeFonts.smallMedium)
+                        .font(fonts.captionMedium)
                 }
                 .foregroundStyle(theme.warning)
                 .padding(.horizontal, 8)
@@ -576,7 +579,7 @@ struct DashboardMeetingsView: View {
             HStack(spacing: 5) {
                 ClaudeIcon(name: "mic", size: 11, weight: .light)
                 Text(meeting.audioSource.rawValue)
-                    .font(ClaudeFonts.small)
+                    .font(fonts.caption)
             }
             .foregroundStyle(theme.secondaryInk)
             .lineLimit(1)
@@ -589,10 +592,10 @@ struct DashboardMeetingsView: View {
                 .symbolEffect(.variableColor.iterative, isActive: true)
                 .foregroundStyle(theme.danger)
             Text("Запись")
-                .font(ClaudeFonts.smallSemibold)
+                .font(fonts.captionMedium)
                 .foregroundStyle(theme.danger)
             Text(MeetingRecord.formatTimestamp(appState.meetingElapsedSeconds))
-                .font(ClaudeFonts.smallSemibold.monospacedDigit())
+                .font(fonts.captionMedium.monospacedDigit())
                 .foregroundStyle(theme.ink)
         }
         .fixedSize()
@@ -607,7 +610,7 @@ struct DashboardMeetingsView: View {
                 appState.cancelMeeting()
                 appState.selectedMeetingID = meetingsStore.meetings.first?.id
             }
-            .buttonStyle(ClaudeSecondaryButtonStyle(compact: true, isDestructive: true))
+            .buttonStyle(PaperButtonStyle(role: .destructive, compact: true))
 
             Button {
                 appState.finishMeeting()
@@ -618,7 +621,7 @@ struct DashboardMeetingsView: View {
                     Text("Завершить и создать рекап")
                 }
             }
-            .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+            .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
         }
     }
 
@@ -658,7 +661,7 @@ struct DashboardMeetingsView: View {
                         ),
                         axis: .vertical
                     )
-                    .font(ClaudeFonts.meetingTitle)
+                    .font(fonts.meetingTitle)
                     .tracking(-0.3)
                     .textFieldStyle(.plain)
                     .foregroundStyle(theme.ink)
@@ -696,14 +699,14 @@ struct DashboardMeetingsView: View {
                                     Text(copiedFeedback ? "Скопировано" : "Копировать")
                                 }
                             }
-                            .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
 
                             Button {
                                 copyMeetingMarkdown(meeting)
                             } label: {
                                 ClaudeIcon(name: copiedFeedback ? "checkmark" : "doc.on.doc", size: 11, weight: .light)
                             }
-                            .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                         }
                         .help("Скопировать Markdown в буфер обмена")
 
@@ -791,7 +794,7 @@ struct DashboardMeetingsView: View {
 
                     if let engine = meeting.transcriptionEngine, !engine.isEmpty {
                         Text(engine)
-                            .font(ClaudeFonts.small)
+                            .font(fonts.caption)
                             .foregroundStyle(theme.secondaryInk)
                             .lineLimit(1)
                             .padding(.horizontal, 8)
@@ -801,7 +804,7 @@ struct DashboardMeetingsView: View {
 
                     if let lang = meeting.languageSummary {
                         Text(lang)
-                            .font(ClaudeFonts.smallMedium)
+                            .font(fonts.captionMedium)
                             .foregroundStyle(theme.accentInk)
                             .lineLimit(1)
                             .padding(.horizontal, 8)
@@ -828,7 +831,7 @@ struct DashboardMeetingsView: View {
                             }
                         } label: {
                             Text(label)
-                                .font(isSelected ? ClaudeFonts.smallMedium : ClaudeFonts.small)
+                                .font(isSelected ? fonts.captionMedium : fonts.caption)
                                 .lineLimit(1)
                                 .fixedSize()
                                 .foregroundStyle(isSelected ? theme.ink : theme.secondaryInk)
@@ -882,7 +885,7 @@ struct DashboardMeetingsView: View {
                 ClaudeIcon(name: meeting.template.systemImage, size: 11, weight: .light)
                     .foregroundStyle(theme.secondaryInk)
                 Text(meeting.template.rawValue)
-                    .font(ClaudeFonts.smallMedium)
+                    .font(fonts.captionMedium)
                     .lineLimit(1)
                 ClaudeIcon(name: "chevron.down", size: 8, weight: .regular)
                     .foregroundStyle(theme.secondaryInk)
@@ -903,7 +906,7 @@ struct DashboardMeetingsView: View {
         HStack(spacing: 4) {
             ClaudeIcon(name: systemImage, size: 11, weight: .light)
             Text(text)
-                .font(ClaudeFonts.small)
+                .font(fonts.caption)
                 .lineLimit(1)
         }
         .foregroundStyle(theme.secondaryInk)
@@ -989,20 +992,20 @@ struct DashboardMeetingsView: View {
                             Button("На внешний сервер") {
                                 appState.retryMeetingOnWindows(meeting.id)
                             }
-                            .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                         }
 
                         Button("Повторить (gapi.uz)") {
                             appState.transcribeMeetingUrgentGapi(meeting.id)
                         }
-                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+                        .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
                     }
                     Button("Собрать из заметок") {
                         Task {
                             await appState.regenerateRecap(for: meeting.id)
                         }
                     }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                 }
             }
             .padding(12)
@@ -1023,13 +1026,13 @@ struct DashboardMeetingsView: View {
                 Button("Проверить сервер") {
                     appState.retryMeetingOnWindows(meeting.id)
                 }
-                .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
             }
 
             Button("Отправить через gapi.uz") {
                 appState.transcribeMeetingUrgentGapi(meeting.id)
             }
-            .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+            .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
         }
     }
 
@@ -1056,7 +1059,7 @@ struct DashboardMeetingsView: View {
                         Button("Переключить на gapi.uz") {
                             appState.transcribeMeetingUrgentGapi(meeting.id)
                         }
-                        .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                     }
                 }
 
@@ -1076,7 +1079,7 @@ struct DashboardMeetingsView: View {
                         Button("Переключить на gapi.uz") {
                             appState.transcribeMeetingUrgentGapi(meeting.id)
                         }
-                        .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                     }
                 }
             }
@@ -1102,7 +1105,7 @@ struct DashboardMeetingsView: View {
                 }
             }
         }
-        .claudeCard(theme, cornerRadius: 12, padding: 12)
+        .meetingsPaperCard(paperTheme, cornerRadius: 12, padding: 12)
     }
 
     private func resolvedTranscriptionProgress(
@@ -1279,18 +1282,18 @@ struct DashboardMeetingsView: View {
                             ClaudeIcon(name: "checklist", size: 12.5, weight: .light)
                                 .foregroundStyle(theme.secondaryInk)
                             Text("Задачи и следующие шаги")
-                                .font(ClaudeFonts.uiMedium)
+                                .font(fonts.uiMedium)
                                 .foregroundStyle(theme.ink)
                         }
                         Spacer()
                         Text("\(meeting.actionItems.filter(\.completed).count)/\(meeting.actionItems.count)")
-                            .font(ClaudeFonts.small.monospacedDigit())
+                            .font(fonts.caption.monospacedDigit())
                             .foregroundStyle(theme.secondaryInk)
                     }
 
                     if meeting.actionItems.isEmpty {
                         Text("Задачи не обнаружены автоматически. Можно добавить вручную ниже.")
-                            .font(ClaudeFonts.small)
+                            .font(fonts.caption)
                             .foregroundStyle(theme.secondaryInk)
                     } else {
                         ForEach(meeting.actionItems) { item in
@@ -1313,19 +1316,19 @@ struct DashboardMeetingsView: View {
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.text)
-                                        .font(ClaudeFonts.body)
+                                        .font(fonts.body)
                                         .strikethrough(item.completed)
                                         .foregroundStyle(item.completed ? theme.secondaryInk : theme.ink)
                                     if item.assignee != nil || item.timestamp != nil {
                                         HStack(spacing: 6) {
                                             if let assignee = item.assignee {
                                                 Text(assignee)
-                                                    .font(ClaudeFonts.micro)
+                                                    .font(fonts.micro)
                                                     .foregroundStyle(theme.secondaryInk)
                                             }
                                             if let ts = item.timestamp {
                                                 Text("[\(MeetingRecord.formatTimestamp(ts))]")
-                                                    .font(ClaudeFonts.micro.monospacedDigit())
+                                                    .font(fonts.micro.monospacedDigit())
                                                     .foregroundStyle(theme.secondaryInk)
                                             }
                                         }
@@ -1351,7 +1354,7 @@ struct DashboardMeetingsView: View {
                     HStack(spacing: 8) {
                         TextField("Добавить задачу…", text: $newActionItemText)
                             .textFieldStyle(.plain)
-                            .font(ClaudeFonts.ui)
+                            .font(fonts.ui)
                             .foregroundStyle(theme.ink)
                             .onSubmit {
                                 addActionItem(to: meeting.id)
@@ -1361,7 +1364,7 @@ struct DashboardMeetingsView: View {
                         } label: {
                             ClaudeIcon(name: "plus", size: 10.5, weight: .medium)
                         }
-                        .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+                        .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
                         .disabled(newActionItemText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal, 10)
@@ -1372,7 +1375,7 @@ struct DashboardMeetingsView: View {
                             .strokeBorder(theme.border, lineWidth: 1)
                     )
                 }
-                .claudeCard(theme, cornerRadius: 12, padding: 14)
+                .meetingsPaperCard(paperTheme, cornerRadius: 12, padding: 14)
 
                 // Structured recap card
                 VStack(alignment: .leading, spacing: 11) {
@@ -1381,7 +1384,7 @@ struct DashboardMeetingsView: View {
                             ClaudeIcon(name: "doc.text", size: 12.5, weight: .light)
                                 .foregroundStyle(theme.secondaryInk)
                             Text("Структурированный рекап")
-                                .font(ClaudeFonts.uiMedium)
+                                .font(fonts.uiMedium)
                                 .foregroundStyle(theme.ink)
                         }
                         Spacer()
@@ -1389,7 +1392,7 @@ struct DashboardMeetingsView: View {
                             Button(isEditingRecapMarkdown ? "Готово" : "Редактировать") {
                                 isEditingRecapMarkdown.toggle()
                             }
-                            .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                            .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                         }
                     }
 
@@ -1402,7 +1405,7 @@ struct DashboardMeetingsView: View {
                                 }
                             )
                         )
-                        .font(ClaudeFonts.mono)
+                        .font(fonts.mono)
                         .foregroundStyle(theme.ink)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 280)
@@ -1417,14 +1420,14 @@ struct DashboardMeetingsView: View {
                             ClaudeIcon(name: "doc.text", size: 22, weight: .ultraLight)
                                 .foregroundStyle(theme.tertiaryInk)
                             Text(meeting.status == .ready ? "Рекап пока пуст" : "Рекап появится после расшифровки")
-                                .font(ClaudeFonts.uiMedium)
+                                .font(fonts.uiMedium)
                                 .foregroundStyle(theme.secondaryInk)
                             Text(
                                 meeting.status == .ready
                                     ? "Выберите «Пересобрать рекап» в меню действий или заполните вручную."
                                     : "Как только аудио будет расшифровано, VoiceType автоматически соберёт структурированный конспект."
                             )
-                            .font(ClaudeFonts.small)
+                            .font(fonts.caption)
                             .foregroundStyle(theme.tertiaryInk)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 380)
@@ -1433,7 +1436,7 @@ struct DashboardMeetingsView: View {
                                 Button("Редактировать вручную") {
                                     isEditingRecapMarkdown = true
                                 }
-                                .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                                 .padding(.top, 4)
                             }
                         }
@@ -1444,7 +1447,7 @@ struct DashboardMeetingsView: View {
                             .textSelection(.enabled)
                     }
                 }
-                .claudeCard(theme, cornerRadius: 12, padding: 15)
+                .meetingsPaperCard(paperTheme, cornerRadius: 12, padding: 15)
             }
         }
         .scrollIndicators(.hidden)
@@ -1466,30 +1469,30 @@ struct DashboardMeetingsView: View {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if trimmed.hasPrefix("## ") {
                     Text(String(trimmed.dropFirst(3)))
-                        .font(ClaudeFonts.recapH2)
+                        .font(fonts.recapH2)
                         .tracking(-0.2)
                         .foregroundStyle(theme.ink)
                         .padding(.top, 8)
                 } else if trimmed.hasPrefix("# ") {
                     Text(String(trimmed.dropFirst(2)))
-                        .font(ClaudeFonts.recapH1)
+                        .font(fonts.recapH1)
                         .tracking(-0.25)
                         .foregroundStyle(theme.ink)
                         .padding(.top, 10)
                 } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
                     HStack(alignment: .top, spacing: 8) {
                         Text("•")
-                            .font(ClaudeFonts.body)
+                            .font(fonts.body)
                             .foregroundStyle(theme.accent)
                         Text((try? AttributedString(markdown: String(trimmed.dropFirst(2)))) ?? AttributedString(String(trimmed.dropFirst(2))))
-                            .font(ClaudeFonts.body)
+                            .font(fonts.body)
                             .lineSpacing(3.5)
                             .foregroundStyle(theme.ink)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else if !trimmed.isEmpty {
                     Text((try? AttributedString(markdown: trimmed)) ?? AttributedString(trimmed))
-                        .font(ClaudeFonts.body)
+                        .font(fonts.body)
                         .lineSpacing(3.5)
                         .foregroundStyle(theme.ink)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1506,7 +1509,7 @@ struct DashboardMeetingsView: View {
             ViewThatFits(in: .horizontal) {
                 HStack {
                     Text("Ваши заметки со встречи (используются как скелет важности при генерации рекапа)")
-                        .font(ClaudeFonts.small)
+                        .font(fonts.caption)
                         .foregroundStyle(theme.secondaryInk)
                     Spacer()
                     regenerateFromNotesButton(meeting)
@@ -1514,7 +1517,7 @@ struct DashboardMeetingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Ваши заметки со встречи (используются как скелет важности при генерации рекапа)")
-                        .font(ClaudeFonts.small)
+                        .font(fonts.caption)
                         .foregroundStyle(theme.secondaryInk)
                     regenerateFromNotesButton(meeting)
                 }
@@ -1528,7 +1531,7 @@ struct DashboardMeetingsView: View {
                     }
                 )
             )
-            .font(ClaudeFonts.body)
+            .font(fonts.body)
             .foregroundStyle(theme.ink)
             .scrollContentBackground(.hidden)
             .padding(14)
@@ -1552,7 +1555,7 @@ struct DashboardMeetingsView: View {
                 Text("Обновить рекап по заметкам")
             }
         }
-        .buttonStyle(ClaudePrimaryButtonStyle(compact: true))
+        .buttonStyle(PaperButtonStyle(role: .primary, compact: true))
     }
 
     // MARK: - Tab 3: Diarized Transcript
@@ -1579,11 +1582,11 @@ struct DashboardMeetingsView: View {
                             Text("Спикеры (\(speakerIDs.count))")
                         }
                     }
-                    .buttonStyle(ClaudeSecondaryButtonStyle(compact: true))
+                    .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
                     .popover(isPresented: $showSpeakersPopover, arrowEdge: .bottom) {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Имена спикеров")
-                                .font(ClaudeFonts.uiSemibold)
+                                .font(fonts.uiSemibold)
                             ForEach(speakerIDs, id: \.self) { spk in
                                 HStack(spacing: 8) {
                                     Circle()
@@ -1616,7 +1619,7 @@ struct DashboardMeetingsView: View {
                         .foregroundStyle(theme.secondaryInk)
                     TextField("Поиск по репликам…", text: $transcriptSearch)
                         .textFieldStyle(.plain)
-                        .font(ClaudeFonts.ui)
+                        .font(fonts.ui)
                         .foregroundStyle(theme.ink)
                     if !transcriptSearch.isEmpty {
                         Button {
@@ -1644,7 +1647,7 @@ struct DashboardMeetingsView: View {
                     ClaudeIcon(name: meeting.segments.isEmpty ? "text.alignleft" : "magnifyingglass", size: 22, weight: .ultraLight)
                         .foregroundStyle(theme.tertiaryInk)
                     Text(meeting.segments.isEmpty ? "Транскрипт пока пуст" : "Реплики не найдены")
-                        .font(ClaudeFonts.uiMedium)
+                        .font(fonts.uiMedium)
                         .foregroundStyle(theme.secondaryInk)
                     Spacer()
                 }
@@ -1655,13 +1658,13 @@ struct DashboardMeetingsView: View {
                         ForEach(Array(filteredSegments.enumerated()), id: \.offset) { _, seg in
                             HStack(alignment: .top, spacing: 10) {
                                 Text(MeetingRecord.formatTimestamp(seg.start))
-                                    .font(ClaudeFonts.micro.monospacedDigit())
+                                    .font(fonts.micro.monospacedDigit())
                                     .foregroundStyle(theme.secondaryInk)
                                     .frame(width: 40, alignment: .leading)
                                     .padding(.top, 2)
 
                                 Text(meeting.displayName(for: seg.speaker))
-                                    .font(ClaudeFonts.microMedium)
+                                    .font(fonts.microMedium)
                                     .foregroundStyle(speakerColor(for: seg.speaker ?? 0))
                                     .lineLimit(1)
                                     .padding(.horizontal, 7)
@@ -1670,7 +1673,7 @@ struct DashboardMeetingsView: View {
                                     .frame(minWidth: 64, maxWidth: 112, alignment: .leading)
 
                                 Text(seg.text)
-                                    .font(ClaudeFonts.body)
+                                    .font(fonts.body)
                                     .lineSpacing(3)
                                     .foregroundStyle(theme.ink)
                                     .textSelection(.enabled)
@@ -1724,5 +1727,87 @@ struct DashboardMeetingsView: View {
 
     private static func formatBytes(_ bytes: Int64) -> String {
         byteFormatter.string(fromByteCount: max(0, bytes))
+    }
+}
+
+
+private struct MeetingsPaperTheme {
+    let paper: PaperTheme
+
+    var surface: Color {
+        paper.surfaceColor.opacity(paper.isDark ? 0.92 : 0.86)
+    }
+
+    var surfaceSubtle: Color {
+        paper.insetColor
+    }
+
+    var hoverFill: Color {
+        paper.hoverColor
+    }
+
+    var selectedFill: Color {
+        paper.selectedSidebarColor
+    }
+
+    var ink: Color {
+        paper.inkColor
+    }
+
+    var secondaryInk: Color {
+        paper.secondaryInkColor
+    }
+
+    var tertiaryInk: Color {
+        paper.tertiaryInkColor
+    }
+
+    var border: Color {
+        paper.borderColor
+    }
+
+    var accent: Color {
+        paper.isDark ? Color(red: 0.45, green: 0.67, blue: 1.0) : PaperTokens.dictationBlue
+    }
+
+    var accentLight: Color {
+        accent.opacity(0.65)
+    }
+
+    var accentSoft: Color {
+        accent.opacity(paper.isDark ? 0.18 : 0.12)
+    }
+
+    var accentInk: Color {
+        paper.isDark ? Color(red: 0.72, green: 0.85, blue: 1.0) : Color(red: 0.14, green: 0.35, blue: 0.76)
+    }
+
+    var success: Color {
+        paper.successColor
+    }
+
+    var warning: Color {
+        paper.clipboardWarningColor
+    }
+
+    var danger: Color {
+        PaperTokens.recordingRed
+    }
+
+    var cardShadow: Color {
+        paper.shadowRGB.color.opacity(paper.isDark ? 0.30 : 0.05)
+    }
+}
+
+private extension View {
+    func meetingsPaperCard(_ theme: PaperTheme, cornerRadius: CGFloat = 12, padding: CGFloat = 14) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return self
+            .padding(padding)
+            .background(theme.surfaceColor.opacity(theme.isDark ? 0.92 : 0.86), in: shape)
+            .overlay(
+                shape.strokeBorder(theme.borderColor, lineWidth: 0.75)
+            )
+            .shadow(color: theme.shadowRGB.color.opacity(theme.isDark ? 0.30 : 0.05), radius: 6, y: 2)
     }
 }

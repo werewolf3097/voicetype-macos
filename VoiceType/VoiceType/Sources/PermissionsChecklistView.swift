@@ -90,12 +90,12 @@ struct PermissionsChecklistView: View {
             }
         }
         .background(
-            theme.surfaceColor.opacity(0.55),
+            theme.isDark ? theme.surfaceColor.opacity(0.92) : theme.surfaceColor.opacity(0.84),
             in: RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: PaperTokens.cardRadius, style: .continuous)
-                .strokeBorder(theme.borderColor, lineWidth: PaperTokens.hairline)
+                .strokeBorder(theme.borderColor, lineWidth: 0.75)
         )
     }
 

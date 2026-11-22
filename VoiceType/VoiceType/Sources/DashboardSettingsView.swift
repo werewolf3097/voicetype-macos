@@ -344,7 +344,7 @@ struct DashboardSettingsView: View {
                     Text("Бумага и текстура")
                         .font(fonts.uiMedium)
                         .foregroundStyle(paperTheme.inkColor)
-                    Text("Бесплатные темы открыты сразу, текстурные бумаги — в Pro.")
+                    Text("Все 9 бумаг открыты сразу для тестирования.")
                         .font(fonts.caption)
                         .foregroundStyle(paperTheme.secondaryInkColor)
                 }
@@ -417,7 +417,7 @@ struct DashboardSettingsView: View {
 
             PaperSettingRow(
                 "Шрифт интерфейса",
-                caption: "Выбор между New York + SF, Cormorant + Inter и системным SF.",
+                caption: "Заголовки и текст во всех разделах, включая «Встречи».",
                 systemImage: "textformat",
                 tileTint: PaperTokens.settingsSlate
             ) {
@@ -427,7 +427,7 @@ struct DashboardSettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 220)
+                .frame(width: 240)
             }
 
             hairlineDivider
@@ -447,18 +447,13 @@ struct DashboardSettingsView: View {
 
     private func paperCard(_ candidate: PaperTheme) -> some View {
         let isSelected = settings.paperThemeID == candidate.id
-        let isLocked = candidate.isPro && !entitlement.isPro
 
         return Button {
-            if isLocked {
-                proUpsellTheme = candidate
-            } else {
-                settings.paperThemeID = candidate.id
-                if candidate.isDark {
-                    settings.appearance = .dark
-                } else if settings.appearance == .dark {
-                    settings.appearance = .light
-                }
+            settings.paperThemeID = candidate.id
+            if candidate.isDark {
+                settings.appearance = .dark
+            } else if settings.appearance == .dark {
+                settings.appearance = .light
             }
         } label: {
             VStack(alignment: .leading, spacing: 6) {
@@ -481,14 +476,6 @@ struct DashboardSettingsView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(candidate.isDark ? Color.white : PaperTokens.dictationBlue)
                             .padding(5)
-                    } else if candidate.isPro {
-                        Text(isLocked ? "Pro" : "Включено")
-                            .font(.system(size: 9.5, weight: .medium))
-                            .foregroundStyle(candidate.inkColor)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(candidate.surfaceColor.opacity(0.9), in: Capsule())
-                            .padding(4)
                     }
                 }
 
@@ -500,18 +487,18 @@ struct DashboardSettingsView: View {
             .padding(7)
             .background(
                 RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
-                    .fill(isSelected ? paperTheme.selectedSidebarColor : paperTheme.surfaceColor.opacity(0.6))
+                    .fill(isSelected ? paperTheme.selectedSidebarColor : paperTheme.surfaceColor.opacity(0.75))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
                     .strokeBorder(
-                        isSelected ? paperTheme.inkColor.opacity(0.6) : paperTheme.borderColor,
-                        lineWidth: isSelected ? 1.2 : PaperTokens.hairline
+                        isSelected ? paperTheme.inkColor.opacity(0.65) : paperTheme.borderColor,
+                        lineWidth: isSelected ? 1.25 : PaperTokens.hairline
                     )
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(candidate.name)\(isLocked ? ", доступно в Pro" : "")")
+        .accessibilityLabel(candidate.name)
     }
 
     private func proPaperSheet(_ lockedTheme: PaperTheme) -> some View {

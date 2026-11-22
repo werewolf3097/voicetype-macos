@@ -5,8 +5,10 @@ import SwiftUI
 
 enum FontPreset: String, CaseIterable, Identifiable, Codable {
     case paperNewYork = "Бумага (New York + SF)"
-    case editorialCormorant = "Редакционный (Cormorant + Inter)"
+    case softCharter = "Книжный (Charter + SF)"
     case systemSF = "Системный (SF)"
+    case roundedSF = "Мягкий (SF Rounded)"
+    case editorialCormorant = "Редакционный (Cormorant + Inter)"
 
     var id: String { rawValue }
 }
@@ -21,116 +23,206 @@ struct PaperFonts {
     var pageTitle: Font {
         switch preset {
         case .paperNewYork:
-            return .system(size: 30, weight: .regular, design: .serif)
+            return .system(size: 28, weight: .medium, design: .serif)
+        case .softCharter:
+            return .custom("Charter-Bold", size: 27)
+        case .systemSF:
+            return .system(size: 27, weight: .semibold, design: .default)
+        case .roundedSF:
+            return .system(size: 27, weight: .semibold, design: .rounded)
         case .editorialCormorant:
             return .custom("CormorantGaramond-Medium", size: 30)
-        case .systemSF:
-            return .system(size: 28, weight: .medium, design: .default)
         }
     }
 
-    var heroTitle: Font {
-        switch preset {
-        case .paperNewYork:
-            return .system(size: 30, weight: .regular, design: .serif)
-        case .editorialCormorant:
-            return .custom("CormorantGaramond-Medium", size: 32)
-        case .systemSF:
-            return .system(size: 28, weight: .medium, design: .default)
-        }
-    }
+    var heroTitle: Font { pageTitle }
 
     var panelTitle: Font {
         switch preset {
         case .paperNewYork:
-            return .system(size: 16, weight: .medium)
+            return .system(size: 20, weight: .medium, design: .serif)
+        case .softCharter:
+            return .custom("Charter-Bold", size: 20)
+        case .systemSF:
+            return .system(size: 19, weight: .semibold, design: .default)
+        case .roundedSF:
+            return .system(size: 19, weight: .semibold, design: .rounded)
         case .editorialCormorant:
             return .custom("CormorantGaramond-Medium", size: 21)
+        }
+    }
+
+    var meetingTitle: Font {
+        switch preset {
+        case .paperNewYork:
+            return .system(size: 23, weight: .medium, design: .serif)
+        case .softCharter:
+            return .custom("Charter-Bold", size: 22)
         case .systemSF:
-            return .system(size: 16, weight: .medium)
+            return .system(size: 22, weight: .semibold, design: .default)
+        case .roundedSF:
+            return .system(size: 22, weight: .semibold, design: .rounded)
+        case .editorialCormorant:
+            return .custom("CormorantGaramond-Medium", size: 25)
+        }
+    }
+
+    var recapH1: Font {
+        switch preset {
+        case .paperNewYork:
+            return .system(size: 20, weight: .semibold, design: .serif)
+        case .softCharter:
+            return .custom("Charter-Bold", size: 20)
+        case .systemSF:
+            return .system(size: 19, weight: .semibold, design: .default)
+        case .roundedSF:
+            return .system(size: 19, weight: .semibold, design: .rounded)
+        case .editorialCormorant:
+            return .custom("CormorantGaramond-SemiBold", size: 22)
+        }
+    }
+
+    var recapH2: Font {
+        switch preset {
+        case .paperNewYork:
+            return .system(size: 17, weight: .semibold, design: .serif)
+        case .softCharter:
+            return .custom("Charter-Bold", size: 17)
+        case .systemSF:
+            return .system(size: 16.5, weight: .semibold, design: .default)
+        case .roundedSF:
+            return .system(size: 16.5, weight: .semibold, design: .rounded)
+        case .editorialCormorant:
+            return .custom("CormorantGaramond-SemiBold", size: 18.5)
         }
     }
 
     var sectionTitle: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 13, weight: .medium)
         case .editorialCormorant:
             return .custom("Inter-Regular_Medium", size: 13)
+        case .roundedSF:
+            return .system(size: 13, weight: .medium, design: .rounded)
+        default:
+            return .system(size: 13, weight: .medium)
         }
     }
 
     var body: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 13, weight: .regular)
         case .editorialCormorant:
             return .custom("Inter-Regular", size: 12.5)
+        case .roundedSF:
+            return .system(size: 13, weight: .regular, design: .rounded)
+        default:
+            return .system(size: 13, weight: .regular)
         }
     }
 
     var bodyMedium: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 13, weight: .medium)
         case .editorialCormorant:
             return .custom("Inter-Regular_Medium", size: 12.5)
+        case .roundedSF:
+            return .system(size: 13, weight: .medium, design: .rounded)
+        default:
+            return .system(size: 13, weight: .medium)
         }
     }
 
     var ui: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 13, weight: .regular)
         case .editorialCormorant:
             return .custom("Inter-Regular", size: 12)
+        case .roundedSF:
+            return .system(size: 13, weight: .regular, design: .rounded)
+        default:
+            return .system(size: 13, weight: .regular)
         }
     }
 
     var uiMedium: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 13, weight: .medium)
         case .editorialCormorant:
             return .custom("Inter-Regular_Medium", size: 12)
+        case .roundedSF:
+            return .system(size: 13, weight: .medium, design: .rounded)
+        default:
+            return .system(size: 13, weight: .medium)
+        }
+    }
+
+    var uiSemibold: Font {
+        switch preset {
+        case .editorialCormorant:
+            return .custom("Inter-Regular_SemiBold", size: 12)
+        case .roundedSF:
+            return .system(size: 13, weight: .semibold, design: .rounded)
+        default:
+            return .system(size: 13, weight: .semibold)
         }
     }
 
     var caption: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 12, weight: .regular)
         case .editorialCormorant:
             return .custom("Inter-Regular", size: 11.5)
+        case .roundedSF:
+            return .system(size: 12, weight: .regular, design: .rounded)
+        default:
+            return .system(size: 12, weight: .regular)
         }
     }
 
     var captionMedium: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 12, weight: .medium)
         case .editorialCormorant:
             return .custom("Inter-Regular_Medium", size: 11.5)
+        case .roundedSF:
+            return .system(size: 12, weight: .medium, design: .rounded)
+        default:
+            return .system(size: 12, weight: .medium)
         }
     }
 
     var micro: Font {
         switch preset {
-        case .paperNewYork, .systemSF:
-            return .system(size: 11, weight: .regular)
         case .editorialCormorant:
             return .custom("Inter-Regular", size: 10.5)
+        case .roundedSF:
+            return .system(size: 11, weight: .regular, design: .rounded)
+        default:
+            return .system(size: 11, weight: .regular)
         }
+    }
+
+    var microMedium: Font {
+        switch preset {
+        case .editorialCormorant:
+            return .custom("Inter-Regular_Medium", size: 10.5)
+        case .roundedSF:
+            return .system(size: 11, weight: .medium, design: .rounded)
+        default:
+            return .system(size: 11, weight: .medium)
+        }
+    }
+
+    var mono: Font {
+        .system(size: 12, design: .monospaced)
     }
 
     var statNumber: Font {
         switch preset {
         case .paperNewYork:
             return .system(size: 24, weight: .medium)
+        case .softCharter:
+            return .custom("Charter-Bold", size: 24)
+        case .systemSF:
+            return .system(size: 24, weight: .semibold)
+        case .roundedSF:
+            return .system(size: 24, weight: .semibold, design: .rounded)
         case .editorialCormorant:
             return .custom("CormorantGaramond-Regular", size: 26)
-        case .systemSF:
-            return .system(size: 24, weight: .medium)
         }
     }
 }
@@ -171,20 +263,13 @@ final class LocalProEntitlement: ObservableObject, ProEntitlement {
 
     private static let debugKey = "debugOverrideProEntitlement"
 
+    /// В тестовой сборке все темы бумаги открыты сразу без блокировки.
     var isPro: Bool {
-        #if DEBUG
-        return debugOverridePro
-        #else
-        return false
-        #endif
+        true
     }
 
     init() {
-        #if DEBUG
-        self.debugOverridePro = UserDefaults.standard.bool(forKey: Self.debugKey)
-        #else
-        self.debugOverridePro = false
-        #endif
+        self.debugOverridePro = UserDefaults.standard.object(forKey: Self.debugKey) as? Bool ?? true
     }
 }
 
@@ -283,37 +368,37 @@ struct PaperTheme: Identifiable, Equatable {
     /// Sidebar is ~7% warm shadow over paper base (per section 4.1).
     var sidebarColor: Color {
         if isDark {
-            return base.blended(with: shadowRGB, fraction: 0.16).color
+            return base.blended(with: shadowRGB, fraction: 0.24).color
         }
         return base.blended(with: shadowRGB, fraction: 0.07).color
     }
 
-    /// Elevated control surface (L2/L3).
+    /// Elevated control / card surface (L2/L3).
     var surfaceColor: Color {
         if isDark {
-            return base.blended(with: PaperRGB(hex: 0xFFFFFF), fraction: 0.06).color
+            return base.blended(with: PaperRGB(hex: 0xFFFFFF), fraction: 0.11).color
         }
-        return base.blended(with: PaperRGB(hex: 0xFFFFFF), fraction: 0.58).color
+        return base.blended(with: PaperRGB(hex: 0xFFFFFF), fraction: 0.64).color
     }
 
     /// Recessed surface (L1).
     var insetColor: Color {
         if isDark {
-            return base.blended(with: PaperRGB(hex: 0x000000), fraction: 0.22).color
+            return base.blended(with: PaperRGB(hex: 0x000000), fraction: 0.30).color
         }
         return base.blended(with: shadowRGB, fraction: 0.08).color
     }
 
     var hoverColor: Color {
-        isDark ? Color.white.opacity(0.09) : shadowRGB.color.opacity(0.08)
+        isDark ? Color.white.opacity(0.11) : shadowRGB.color.opacity(0.08)
     }
 
     var selectedSidebarColor: Color {
-        isDark ? Color.white.opacity(0.12) : shadowRGB.color.opacity(0.11)
+        isDark ? Color.white.opacity(0.14) : shadowRGB.color.opacity(0.11)
     }
 
     var borderColor: Color {
-        isDark ? Color.white.opacity(0.13) : shadowRGB.color.opacity(0.16)
+        isDark ? Color.white.opacity(0.16) : shadowRGB.color.opacity(0.18)
     }
 
     var subtleHighlightColor: Color {
