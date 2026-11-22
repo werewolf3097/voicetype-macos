@@ -332,7 +332,7 @@ struct DashboardHomeView: View {
                 .font(fonts.caption)
                 .foregroundStyle(paperTheme.inkColor)
 
-            Text("Текст отправляется в Anthropic API. Без ключа текст вставляется как распознан.")
+            Text(settings.activeLLMConfig.privacyCaption)
                 .font(fonts.caption)
                 .foregroundStyle(paperTheme.secondaryInkColor)
         }

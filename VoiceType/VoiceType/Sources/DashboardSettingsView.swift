@@ -9,7 +9,7 @@ struct DashboardSettingsView: View {
     @Environment(\.paperTheme) private var paperTheme
     @Environment(\.paperFontPreset) private var fontPreset
 
-    private enum HomeServerCheckState: Equatable {
+    private enum ConnectionCheckState: Equatable {
         case idle
         case checking
         case success(String)
@@ -22,7 +22,8 @@ struct DashboardSettingsView: View {
         expiredMeetingsCount: 0,
         expiredBytes: 0
     )
-    @State private var homeServerCheckState: HomeServerCheckState = .idle
+    @State private var homeServerCheckState: ConnectionCheckState = .idle
+    @State private var llmCheckState: ConnectionCheckState = .idle
     @State private var showAdvanced = false
     @State private var proUpsellTheme: PaperTheme? = nil
     @State private var inputDevices: [AudioInputDevice] = []
@@ -182,7 +183,7 @@ struct DashboardSettingsView: View {
 
             PaperSettingRow(
                 "Обработка текста",
-                caption: "Текст отправляется в Anthropic API. Без ключа текст вставляется как распознан.",
+                caption: settings.activeLLMConfig.privacyCaption,
                 systemImage: "sparkles",
                 tileTint: PaperTokens.dictationBlue
             ) {
@@ -553,35 +554,221 @@ struct DashboardSettingsView: View {
     }
 
     private var apiKeysGroup: some View {
-        PaperSettingGroup("Ключи API") {
-            PaperSettingRow(
-                "Токен gapi.uz",
-                caption: "Аудио для распознавания отправляется на console.gapi.uz. Токен хранится в Keychain.",
-                systemImage: "key",
-                tileTint: PaperTokens.dictionaryTeal
-            ) {
-                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
-                    SecureField("Вставьте API-токен", text: $settings.gapiToken)
-                        .textFieldStyle(.plain)
-                        .font(fonts.ui)
+        VStack(alignment: .leading, spacing: 20) {
+            PaperSettingGroup("Распознавание речи (STT)") {
+                PaperSettingRow(
+                    "Токен gapi.uz",
+                    caption: "Отправляет голос на console.gapi.uz (особенно хорошо для узбекской речи). Хранится в Keychain.",
+                    systemImage: "key",
+                    tileTint: PaperTokens.dictionaryTeal
+                ) {
+                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                        SecureField("Вставьте API-токен", text: $settings.gapiToken)
+                            .textFieldStyle(.plain)
+                            .font(fonts.ui)
+                    }
+                    .frame(width: 240)
                 }
-                .frame(width: 240)
             }
 
-            hairlineDivider
-
-            PaperSettingRow(
-                "Anthropic API key",
-                caption: "Необязательно. Используется для обработки диктовки и рекапов встреч. Хранится в Keychain.",
-                systemImage: "lock.shield",
-                tileTint: PaperTokens.dictionaryTeal
-            ) {
-                PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
-                    SecureField("sk-ant-...", text: $settings.anthropicApiKey)
-                        .textFieldStyle(.plain)
-                        .font(fonts.ui)
+            PaperSettingGroup("Обработка текста (LLM)") {
+                PaperSettingRow(
+                    "Сервис обработки",
+                    caption: settings.activeLLMConfig.privacyCaption,
+                    systemImage: "sparkles",
+                    tileTint: PaperTokens.dictionaryTeal
+                ) {
+                    PaperSegmentedControl(
+                        options: LLMProviderKind.allCases.map { .init(id: $0, title: $0.shortTitle) },
+                        selection: $settings.llmProvider,
+                        compact: true
+                    )
+                    .onChange(of: settings.llmProvider) { _, _ in
+                        llmCheckState = .idle
+                    }
                 }
-                .frame(width: 240)
+
+                hairlineDivider
+
+                if settings.llmProvider == .openaiCompatible {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Быстрый выбор совместимого сервиса")
+                            .font(fonts.captionMedium)
+                            .foregroundStyle(paperTheme.secondaryInkColor)
+                        ClaudeFlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                            ForEach(OpenAICompatiblePreset.allCases) { preset in
+                                Button(preset.rawValue) {
+                                    settings.customLLMBaseURL = preset.baseURL
+                                    settings.customLLMModel = preset.suggestedModel
+                                    llmCheckState = .idle
+                                }
+                                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true, isCapsule: true))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+
+                    hairlineDivider
+
+                    PaperSettingRow(
+                        "Адрес API (Base URL)",
+                        caption: "Например: https://openrouter.ai/api/v1 или http://localhost:11434/v1",
+                        systemImage: "link",
+                        tileTint: PaperTokens.dictionaryTeal
+                    ) {
+                        PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                            TextField("https://...", text: $settings.customLLMBaseURL)
+                                .textFieldStyle(.plain)
+                                .font(fonts.ui)
+                                .onChange(of: settings.customLLMBaseURL) { _, _ in
+                                    llmCheckState = .idle
+                                }
+                        }
+                        .frame(width: 240)
+                    }
+
+                    hairlineDivider
+                }
+
+                PaperSettingRow(
+                    "API-ключ (\(settings.llmProvider.shortTitle))",
+                    caption: settings.llmProvider.requiresAPIKey
+                        ? "Хранится только в macOS Keychain."
+                        : "Хранится в Keychain. Для локальных Ollama / LM Studio можно оставить пустым.",
+                    systemImage: "lock.shield",
+                    tileTint: PaperTokens.dictionaryTeal
+                ) {
+                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                        SecureField(settings.llmProvider.apiKeyPlaceholder, text: currentLLMAPIKeyBinding)
+                            .textFieldStyle(.plain)
+                            .font(fonts.ui)
+                            .onChange(of: currentLLMAPIKeyBinding.wrappedValue) { _, _ in
+                                llmCheckState = .idle
+                            }
+                    }
+                    .frame(width: 240)
+                }
+
+                hairlineDivider
+
+                PaperSettingRow(
+                    "Модель",
+                    caption: "По умолчанию: \(settings.llmProvider.defaultModel). Можно указать любую модель сервиса.",
+                    systemImage: "cpu",
+                    tileTint: PaperTokens.dictionaryTeal
+                ) {
+                    PaperInsetField(cornerRadius: PaperTokens.controlRadius, horizontalPadding: 9, verticalPadding: 6) {
+                        TextField(settings.llmProvider.defaultModel, text: currentLLMModelBinding)
+                            .textFieldStyle(.plain)
+                            .font(fonts.ui)
+                            .onChange(of: currentLLMModelBinding.wrappedValue) { _, _ in
+                                llmCheckState = .idle
+                            }
+                    }
+                    .frame(width: 240)
+                }
+
+                hairlineDivider
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Проверка подключения")
+                                .font(fonts.uiMedium)
+                                .foregroundStyle(paperTheme.inkColor)
+                            Text("Отправит короткий тестовый запрос к \(settings.llmProvider.rawValue).")
+                                .font(fonts.caption)
+                                .foregroundStyle(paperTheme.secondaryInkColor)
+                        }
+                        Spacer(minLength: 8)
+                        Button {
+                            checkLLMConnection()
+                        } label: {
+                            HStack(spacing: 6) {
+                                if case .checking = llmCheckState {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Text("Проверить")
+                            }
+                        }
+                        .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+                        .disabled(llmCheckState == .checking || !settings.isLLMConfigured)
+                    }
+
+                    llmCheckStatusView
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+        }
+    }
+
+    private var currentLLMAPIKeyBinding: Binding<String> {
+        switch settings.llmProvider {
+        case .anthropic: return $settings.anthropicApiKey
+        case .openai: return $settings.openaiApiKey
+        case .gemini: return $settings.geminiApiKey
+        case .openaiCompatible: return $settings.customLLMApiKey
+        }
+    }
+
+    private var currentLLMModelBinding: Binding<String> {
+        switch settings.llmProvider {
+        case .anthropic: return $settings.anthropicModel
+        case .openai: return $settings.openaiModel
+        case .gemini: return $settings.geminiModel
+        case .openaiCompatible: return $settings.customLLMModel
+        }
+    }
+
+    @ViewBuilder
+    private var llmCheckStatusView: some View {
+        switch llmCheckState {
+        case .idle:
+            EmptyView()
+        case .checking:
+            HStack(spacing: 6) {
+                Image(systemName: "network").font(.system(size: 11))
+                Text("Проверяю \(settings.llmProvider.shortTitle)…")
+                    .font(fonts.caption)
+            }
+            .foregroundStyle(paperTheme.secondaryInkColor)
+        case .success(let summary):
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle").font(.system(size: 11.5))
+                Text(summary).font(fonts.caption)
+            }
+            .foregroundStyle(paperTheme.successColor)
+        case .failure(let message):
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(paperTheme.errorColor)
+                Text(message)
+                    .font(fonts.captionMedium)
+                    .foregroundStyle(paperTheme.inkColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Повторить") {
+                    checkLLMConnection()
+                }
+                .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
+            }
+            .padding(10)
+            .paperSurface(level: .l1Inset, cornerRadius: PaperTokens.controlRadius)
+        }
+    }
+
+    private func checkLLMConnection() {
+        llmCheckState = .checking
+        let config = settings.activeLLMConfig
+        Task {
+            do {
+                let latencyMs = try await LLMPostProcessor(config: config).testConnection()
+                llmCheckState = .success("Подключено · \(config.resolvedModel) (\(latencyMs) мс)")
+            } catch {
+                llmCheckState = .failure(error.localizedDescription)
             }
         }
     }

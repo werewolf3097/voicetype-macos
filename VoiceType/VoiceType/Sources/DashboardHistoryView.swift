@@ -360,7 +360,7 @@ struct DashboardHistoryView: View {
                             }
                             .buttonStyle(PaperButtonStyle(role: .secondary, compact: true))
 
-                            let hasClaudeKey = !settings.anthropicApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            let hasLLM = settings.isLLMConfigured
                             Menu {
                                 ForEach(CleanupStyle.allCases.filter { $0 != .off }) { style in
                                     Button(style.shortTitle) {
@@ -391,8 +391,8 @@ struct DashboardHistoryView: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .paperSurface(level: .l2OnPaper, cornerRadius: PaperTokens.controlRadius)
-                            .disabled(!hasClaudeKey || reprocessingID == record.id)
-                            .help(hasClaudeKey ? "Повторно обработать через Claude" : "Добавьте Anthropic API key в Настройках")
+                            .disabled(!hasLLM || reprocessingID == record.id)
+                            .help(hasLLM ? "Повторно обработать через \(settings.llmProvider.shortTitle)" : "Настройте сервис обработки текста (LLM) в Настройках")
 
                             Spacer()
                         }

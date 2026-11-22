@@ -153,6 +153,24 @@ final class SettingsStore: ObservableObject {
     @Published var cleanupStyle: CleanupStyle {
         didSet { defaults.set(cleanupStyle.rawValue, forKey: "cleanupStyle") }
     }
+    @Published var llmProvider: LLMProviderKind {
+        didSet { defaults.set(llmProvider.rawValue, forKey: "llmProvider") }
+    }
+    @Published var anthropicModel: String {
+        didSet { defaults.set(anthropicModel, forKey: "anthropicModel") }
+    }
+    @Published var openaiModel: String {
+        didSet { defaults.set(openaiModel, forKey: "openaiModel") }
+    }
+    @Published var geminiModel: String {
+        didSet { defaults.set(geminiModel, forKey: "geminiModel") }
+    }
+    @Published var customLLMBaseURL: String {
+        didSet { defaults.set(customLLMBaseURL, forKey: "customLLMBaseURL") }
+    }
+    @Published var customLLMModel: String {
+        didSet { defaults.set(customLLMModel, forKey: "customLLMModel") }
+    }
     @Published var uzbekStyle: UzbekStyle {
         didSet { defaults.set(uzbekStyle.rawValue, forKey: "uzbekStyle") }
     }
@@ -243,6 +261,36 @@ final class SettingsStore: ObservableObject {
             KeychainStore.set(anthropicApiKey, forKey: "anthropicApiKey")
         }
     }
+    @Published var openaiApiKey: String {
+        didSet {
+            guard persistSecrets else { return }
+            if openaiApiKey.isEmpty {
+                KeychainStore.delete("openaiApiKey")
+            } else {
+                KeychainStore.set(openaiApiKey, forKey: "openaiApiKey")
+            }
+        }
+    }
+    @Published var geminiApiKey: String {
+        didSet {
+            guard persistSecrets else { return }
+            if geminiApiKey.isEmpty {
+                KeychainStore.delete("geminiApiKey")
+            } else {
+                KeychainStore.set(geminiApiKey, forKey: "geminiApiKey")
+            }
+        }
+    }
+    @Published var customLLMApiKey: String {
+        didSet {
+            guard persistSecrets else { return }
+            if customLLMApiKey.isEmpty {
+                KeychainStore.delete("customLLMApiKey")
+            } else {
+                KeychainStore.set(customLLMApiKey, forKey: "customLLMApiKey")
+            }
+        }
+    }
     @Published var homeServerToken: String {
         didSet {
             guard persistSecrets else { return }
@@ -256,6 +304,43 @@ final class SettingsStore: ObservableObject {
 
     var autoPaste: Bool {
         pasteMode == .autoPaste
+    }
+
+    var activeLLMConfig: LLMConfiguration {
+        switch llmProvider {
+        case .anthropic:
+            return LLMConfiguration(
+                provider: .anthropic,
+                apiKey: anthropicApiKey,
+                model: anthropicModel,
+                customBaseURL: ""
+            )
+        case .openai:
+            return LLMConfiguration(
+                provider: .openai,
+                apiKey: openaiApiKey,
+                model: openaiModel,
+                customBaseURL: ""
+            )
+        case .gemini:
+            return LLMConfiguration(
+                provider: .gemini,
+                apiKey: geminiApiKey,
+                model: geminiModel,
+                customBaseURL: ""
+            )
+        case .openaiCompatible:
+            return LLMConfiguration(
+                provider: .openaiCompatible,
+                apiKey: customLLMApiKey,
+                model: customLLMModel,
+                customBaseURL: customLLMBaseURL
+            )
+        }
+    }
+
+    var isLLMConfigured: Bool {
+        activeLLMConfig.isConfigured
     }
 
     var shortcutDisplayLabel: String {
@@ -341,6 +426,12 @@ final class SettingsStore: ObservableObject {
 
         self.restoreClipboard = defaults.object(forKey: "restoreClipboard") as? Bool ?? true
         self.cleanupStyle = CleanupStyle(rawValue: defaults.string(forKey: "cleanupStyle") ?? "") ?? .grammar
+        self.llmProvider = LLMProviderKind(rawValue: defaults.string(forKey: "llmProvider") ?? "") ?? .anthropic
+        self.anthropicModel = defaults.string(forKey: "anthropicModel") ?? LLMProviderKind.anthropic.defaultModel
+        self.openaiModel = defaults.string(forKey: "openaiModel") ?? LLMProviderKind.openai.defaultModel
+        self.geminiModel = defaults.string(forKey: "geminiModel") ?? LLMProviderKind.gemini.defaultModel
+        self.customLLMBaseURL = defaults.string(forKey: "customLLMBaseURL") ?? OpenAICompatiblePreset.openrouter.baseURL
+        self.customLLMModel = defaults.string(forKey: "customLLMModel") ?? OpenAICompatiblePreset.openrouter.suggestedModel
         self.uzbekStyle = UzbekStyle(rawValue: defaults.string(forKey: "uzbekStyle") ?? "") ?? .tashkent
         self.appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         self.paperThemeID = defaults.string(forKey: "paperThemeID") ?? PaperTheme.cleanSheet.id
@@ -378,10 +469,16 @@ final class SettingsStore: ObservableObject {
         if persistSecrets {
             self.gapiToken = KeychainStore.get("gapiToken") ?? ""
             self.anthropicApiKey = KeychainStore.get("anthropicApiKey") ?? ""
+            self.openaiApiKey = KeychainStore.get("openaiApiKey") ?? ""
+            self.geminiApiKey = KeychainStore.get("geminiApiKey") ?? ""
+            self.customLLMApiKey = KeychainStore.get("customLLMApiKey") ?? ""
             self.homeServerToken = KeychainStore.get("homeServerToken") ?? ""
         } else {
             self.gapiToken = ""
             self.anthropicApiKey = ""
+            self.openaiApiKey = ""
+            self.geminiApiKey = ""
+            self.customLLMApiKey = ""
             self.homeServerToken = ""
         }
 

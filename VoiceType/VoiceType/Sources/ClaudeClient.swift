@@ -73,7 +73,7 @@ struct ClaudeClient {
         return resultText.isEmpty ? text : resultText
     }
 
-    private static func buildSystemPrompt(
+    static func buildSystemPrompt(
         base: String,
         transcription: GapiTranscription,
         uzbekStyle: UzbekStyle
@@ -114,7 +114,7 @@ struct ClaudeClient {
         return ([base] + extra).joined(separator: "\n\n")
     }
 
-    private static func buildUserPrompt(transcription: GapiTranscription) -> String {
+    static func buildUserPrompt(transcription: GapiTranscription) -> String {
         let labeledSegments = transcription.segments.filter { $0.languageCode != nil && !$0.text.isEmpty }
         if labeledSegments.count > 1 {
             let lines = labeledSegments.map { seg in
@@ -126,6 +126,38 @@ struct ClaudeClient {
     }
 
     func generateMeetingRecap(for meeting: MeetingRecord) async throws -> MeetingRecapOutput {
+        let prompts = Self.buildMeetingRecapPrompts(for: meeting)
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body = RequestBody(
+            model: recapModel,
+            max_tokens: 4096,
+            system: prompts.system,
+            messages: [.init(role: "user", content: prompts.user)]
+        )
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let message = String(data: data, encoding: .utf8) ?? "Claude API вернул ошибку"
+            throw ClaudeError(message: message)
+        }
+
+        let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
+        let fullText = decoded.content.compactMap(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fullText.isEmpty else {
+            return LocalRecapBuilder.build(for: meeting)
+        }
+
+        return Self.parseMeetingRecapResponse(fullText, for: meeting)
+    }
+
+    static func buildMeetingRecapPrompts(for meeting: MeetingRecord) -> (system: String, user: String) {
         let headings = meeting.template.sectionHeadings.map { "## \($0)" }.joined(separator: "\n")
         let systemPrompt = """
         Ты — ассистент для подведения итогов встреч в стиле Granola.ai.
@@ -162,33 +194,10 @@ struct ClaudeClient {
         if !transcriptLines.isEmpty {
             userParts.append("Транскрипт встречи:\n\(transcriptLines)")
         }
+        return (system: systemPrompt, user: userParts.joined(separator: "\n\n"))
+    }
 
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = RequestBody(
-            model: recapModel,
-            max_tokens: 4096,
-            system: systemPrompt,
-            messages: [.init(role: "user", content: userParts.joined(separator: "\n\n"))]
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let message = String(data: data, encoding: .utf8) ?? "Claude API вернул ошибку"
-            throw ClaudeError(message: message)
-        }
-
-        let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
-        let fullText = decoded.content.compactMap(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !fullText.isEmpty else {
-            return LocalRecapBuilder.build(for: meeting)
-        }
-
+    static func parseMeetingRecapResponse(_ fullText: String, for meeting: MeetingRecord) -> MeetingRecapOutput {
         let parts = fullText.components(separatedBy: "---ACTION_ITEMS---")
         let markdown = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
         var actionItems: [MeetingActionItem] = []

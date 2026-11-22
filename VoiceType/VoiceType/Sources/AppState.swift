@@ -363,11 +363,11 @@ final class AppState: ObservableObject {
             // Применяем локальный словарь замен «слышится → пишется»
             var finalText = dictionary.apply(to: rawText)
             let activeStyle = settings.cleanupStyle
-            let anthropicKey = settings.anthropicApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let llmConfig = settings.activeLLMConfig
 
-            if activeStyle != .off && !anthropicKey.isEmpty {
+            if activeStyle != .off && llmConfig.isConfigured {
                 status = .cleaning
-                let inputForClaude = GapiTranscription(
+                let inputForLLM = GapiTranscription(
                     text: finalText,
                     languageCode: result.languageCode,
                     languageConfidence: nil,
@@ -375,8 +375,8 @@ final class AppState: ObservableObject {
                     segments: [],
                     audioSeconds: result.audioSeconds
                 )
-                finalText = try await ClaudeClient(apiKey: anthropicKey).cleanup(
-                    transcription: inputForClaude,
+                finalText = try await LLMPostProcessor(config: llmConfig).cleanup(
+                    transcription: inputForLLM,
                     style: activeStyle,
                     uzbekStyle: settings.uzbekStyle
                 )
@@ -453,8 +453,8 @@ final class AppState: ObservableObject {
     func reprocessRecord(_ recordID: UUID, with style: CleanupStyle) async {
         guard let record = history.records.first(where: { $0.id == recordID }),
               !record.text.isEmpty else { return }
-        let anthropicKey = settings.anthropicApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !anthropicKey.isEmpty, style != .off else { return }
+        let llmConfig = settings.activeLLMConfig
+        guard llmConfig.isConfigured, style != .off else { return }
 
         let input = GapiTranscription(
             text: record.text,
@@ -464,7 +464,7 @@ final class AppState: ObservableObject {
             segments: []
         )
         do {
-            let cleaned = try await ClaudeClient(apiKey: anthropicKey).cleanup(
+            let cleaned = try await LLMPostProcessor(config: llmConfig).cleanup(
                 transcription: input,
                 style: style,
                 uzbekStyle: settings.uzbekStyle
@@ -940,7 +940,8 @@ final class AppState: ObservableObject {
         }
         let generated = await MeetingRecapGenerator.generate(
             for: current,
-            anthropicApiKey: settings.anthropicApiKey
+            anthropicApiKey: settings.anthropicApiKey,
+            llmConfig: settings.activeLLMConfig
         )
         meetings.update(meetingID) { record in
             record.recapMarkdown = generated.recapMarkdown

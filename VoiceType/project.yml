@@ -57,6 +57,10 @@ targets:
       - path: VoiceType/Sources/AudioRecorder.swift
       - path: VoiceType/Sources/AudioInputDeviceManager.swift
       - path: VoiceType/Sources/SoundCuePlayer.swift
+      - path: VoiceType/Sources/LLMPostProcessor.swift
+      - path: VoiceType/Sources/ClaudeClient.swift
+      - path: VoiceType/Sources/MeetingsStore.swift
+      - path: VoiceType/Sources/MeetingRecapGenerator.swift
       - path: VoiceType/Sources/PaperComponents.swift
       - path: VoiceType/Sources/RecordingIndicatorView.swift
       - path: VoiceType/Sources/RecordingIndicatorController.swift
