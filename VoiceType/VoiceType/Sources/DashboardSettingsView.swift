@@ -5,6 +5,7 @@ struct DashboardSettingsView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var meetingsStore: MeetingsStore
+    @EnvironmentObject var entitlement: LocalProEntitlement
     @Environment(\.paperTheme) private var paperTheme
     @Environment(\.paperFontPreset) private var fontPreset
 
@@ -23,6 +24,7 @@ struct DashboardSettingsView: View {
     )
     @State private var homeServerCheckState: HomeServerCheckState = .idle
     @State private var showAdvanced = false
+    @State private var proUpsellTheme: PaperTheme? = nil
 
     private var fonts: PaperFonts { PaperFonts(preset: fontPreset) }
 
@@ -84,6 +86,9 @@ struct DashboardSettingsView: View {
         }
         .onChange(of: meetingsStore.meetings) { _, _ in
             refreshAudioStats()
+        }
+        .sheet(item: $proUpsellTheme) { lockedTheme in
+            proPaperSheet(lockedTheme)
         }
     }
 
@@ -242,17 +247,78 @@ struct DashboardSettingsView: View {
 
     private var appearanceGroup: some View {
         PaperSettingGroup("Внешний вид") {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Бумага и текстура")
+                        .font(fonts.uiMedium)
+                        .foregroundStyle(paperTheme.inkColor)
+                    Text("Бесплатные темы открыты сразу, текстурные бумаги — в Pro.")
+                        .font(fonts.caption)
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
+                    ForEach(PaperTheme.allThemes) { candidate in
+                        paperCard(candidate)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            hairlineDivider
+
             PaperSettingRow(
-                "Оформление",
-                caption: "По умолчанию совпадает с системной темой macOS.",
+                "Глубина кнопок",
+                caption: "Масштаб теней и объёма элементов управления.",
+                systemImage: "square.stack.3d.up",
+                tileTint: PaperTokens.settingsSlate
+            ) {
+                HStack(spacing: 8) {
+                    Slider(value: $settings.paperDepth, in: 0...1, step: 0.05)
+                        .frame(width: 160)
+                    Text("\(Int((settings.paperDepth * 100).rounded()))%")
+                        .font(fonts.caption.monospacedDigit())
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                        .frame(width: 36, alignment: .trailing)
+                }
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Зерно бумаги",
+                caption: "Интенсивность процедурной фактуры листа.",
+                systemImage: "sparkles.rectangle.stack",
+                tileTint: PaperTokens.settingsSlate
+            ) {
+                HStack(spacing: 8) {
+                    Slider(value: $settings.paperGrainIntensity, in: 0...1, step: 0.05)
+                        .frame(width: 160)
+                    Text("\(Int((settings.paperGrainIntensity * 100).rounded()))%")
+                        .font(fonts.caption.monospacedDigit())
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                        .frame(width: 36, alignment: .trailing)
+                }
+            }
+
+            hairlineDivider
+
+            PaperSettingRow(
+                "Следовать системной теме",
+                caption: "При тёмной теме macOS автоматически используется бумага «Графит».",
                 systemImage: "circle.lefthalf.filled",
                 tileTint: PaperTokens.settingsSlate
             ) {
-                PaperSegmentedControl(
-                    options: AppearanceMode.allCases.map { .init(id: $0, title: $0.rawValue) },
-                    selection: $settings.appearance,
-                    compact: true
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { settings.appearance == .system },
+                        set: { settings.appearance = $0 ? .system : .light }
+                    )
                 )
+                .labelsHidden()
+                .toggleStyle(PaperToggleStyle())
             }
 
             hairlineDivider
@@ -285,6 +351,126 @@ struct DashboardSettingsView: View {
                     .toggleStyle(PaperToggleStyle())
             }
         }
+    }
+
+    private func paperCard(_ candidate: PaperTheme) -> some View {
+        let isSelected = settings.paperThemeID == candidate.id
+        let isLocked = candidate.isPro && !entitlement.isPro
+
+        return Button {
+            if isLocked {
+                proUpsellTheme = candidate
+            } else {
+                settings.paperThemeID = candidate.id
+                if candidate.isDark {
+                    settings.appearance = .dark
+                } else if settings.appearance == .dark {
+                    settings.appearance = .light
+                }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                ZStack(alignment: .topTrailing) {
+                    RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
+                        .fill(candidate.baseColor)
+                        .frame(height: 44)
+                        .overlay(
+                            Text("Аа")
+                                .font(.system(size: 16, weight: .medium, design: .serif))
+                                .foregroundStyle(candidate.inkColor)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: PaperTokens.chipRadius, style: .continuous)
+                                .strokeBorder(candidate.borderColor, lineWidth: PaperTokens.hairline)
+                        )
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(candidate.isDark ? Color.white : PaperTokens.dictationBlue)
+                            .padding(5)
+                    } else if candidate.isPro {
+                        Text(isLocked ? "Pro" : "Включено")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(candidate.inkColor)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(candidate.surfaceColor.opacity(0.9), in: Capsule())
+                            .padding(4)
+                    }
+                }
+
+                Text(candidate.name)
+                    .font(fonts.captionMedium)
+                    .foregroundStyle(paperTheme.inkColor)
+                    .lineLimit(1)
+            }
+            .padding(7)
+            .background(
+                RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+                    .fill(isSelected ? paperTheme.selectedSidebarColor : paperTheme.surfaceColor.opacity(0.6))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? paperTheme.inkColor.opacity(0.6) : paperTheme.borderColor,
+                        lineWidth: isSelected ? 1.2 : PaperTokens.hairline
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(candidate.name)\(isLocked ? ", доступно в Pro" : "")")
+    }
+
+    private func proPaperSheet(_ lockedTheme: PaperTheme) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+                    .fill(lockedTheme.baseColor)
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Text("Аа")
+                            .font(.system(size: 20, weight: .medium, design: .serif))
+                            .foregroundStyle(lockedTheme.inkColor)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: PaperTokens.controlRadius, style: .continuous)
+                            .strokeBorder(lockedTheme.borderColor, lineWidth: PaperTokens.hairline)
+                    )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Доступно в Pro")
+                        .font(fonts.pageTitle)
+                        .foregroundStyle(paperTheme.inkColor)
+                    Text("Бумага «\(lockedTheme.name)» входит в набор фактурных бумаг.")
+                        .font(fonts.caption)
+                        .foregroundStyle(paperTheme.secondaryInkColor)
+                }
+            }
+
+            Text("В бесплатной версии доступны темы «Чистый лист» и «Хлопок». Оплата через App Store в этой сборке не подключена.")
+                .font(fonts.body)
+                .foregroundStyle(paperTheme.secondaryInkColor)
+                .fixedSize(horizontal: false, vertical: true)
+
+            #if DEBUG
+            Toggle("Режим разработчика: открыть Pro-бумаги", isOn: $entitlement.debugOverridePro)
+                .toggleStyle(PaperToggleStyle())
+                .font(fonts.ui)
+                .foregroundStyle(paperTheme.inkColor)
+            #endif
+
+            HStack {
+                Spacer()
+                Button("Закрыть") {
+                    proUpsellTheme = nil
+                }
+                .buttonStyle(PaperButtonStyle(role: .primary))
+            }
+        }
+        .padding(24)
+        .frame(width: 400)
+        .background { PaperBackground() }
     }
 
     private var apiKeysGroup: some View {

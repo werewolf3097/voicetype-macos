@@ -341,7 +341,7 @@ struct PaperTheme: Identifiable, Equatable {
         isDark ? Color(red: 0.92, green: 0.42, blue: 0.39) : Color(red: 0.74, green: 0.22, blue: 0.19)
     }
 
-    // MARK: - Free Themes (Phase 1)
+    // MARK: - Paper Themes (section 4.3)
 
     static let cleanSheet = PaperTheme(
         id: "clean_sheet",
@@ -364,10 +364,81 @@ struct PaperTheme: Identifiable, Equatable {
         ink2: PaperRGB(hex: 0x61635C),
         shadowRGB: PaperRGB(hex: 0x363831),
         isDark: false,
-        texture: nil
+        texture: ProceduralPaperTexture(id: "cotton", kind: .cotton, isDarkSurface: false)
     )
 
-    /// Dark paper used when dark appearance is active before Phase 5 textures land.
+    static let washi = PaperTheme(
+        id: "washi",
+        name: "Васи",
+        isPro: true,
+        base: PaperRGB(hex: 0xF0EADB),
+        ink: PaperRGB(hex: 0x2B2720),
+        ink2: PaperRGB(hex: 0x625B4E),
+        shadowRGB: PaperRGB(hex: 0x423828),
+        isDark: false,
+        texture: ProceduralPaperTexture(id: "washi", kind: .washi, isDarkSurface: false)
+    )
+
+    static let kraft = PaperTheme(
+        id: "kraft",
+        name: "Крафт",
+        isPro: true,
+        base: PaperRGB(hex: 0xCDAA7F),
+        ink: PaperRGB(hex: 0x2B1F14),
+        ink2: PaperRGB(hex: 0x4A3825),
+        shadowRGB: PaperRGB(hex: 0x2D1E10),
+        isDark: false,
+        texture: ProceduralPaperTexture(id: "kraft", kind: .kraft, isDarkSurface: false)
+    )
+
+    static let parchment = PaperTheme(
+        id: "parchment",
+        name: "Пергамент",
+        isPro: true,
+        base: PaperRGB(hex: 0xECDDB5),
+        ink: PaperRGB(hex: 0x2C2416),
+        ink2: PaperRGB(hex: 0x5D5038),
+        shadowRGB: PaperRGB(hex: 0x3F3019),
+        isDark: false,
+        texture: ProceduralPaperTexture(id: "parchment", kind: .parchment, isDarkSurface: false)
+    )
+
+    static let linen = PaperTheme(
+        id: "linen",
+        name: "Лён",
+        isPro: true,
+        base: PaperRGB(hex: 0xEAE4D6),
+        ink: PaperRGB(hex: 0x292620),
+        ink2: PaperRGB(hex: 0x5E584B),
+        shadowRGB: PaperRGB(hex: 0x3A3428),
+        isDark: false,
+        texture: ProceduralPaperTexture(id: "linen", kind: .linen, isDarkSurface: false)
+    )
+
+    static let watercolor = PaperTheme(
+        id: "watercolor",
+        name: "Акварельная",
+        isPro: true,
+        base: PaperRGB(hex: 0xF5F2EA),
+        ink: PaperRGB(hex: 0x282621),
+        ink2: PaperRGB(hex: 0x635F55),
+        shadowRGB: PaperRGB(hex: 0x3D372B),
+        isDark: false,
+        texture: ProceduralPaperTexture(id: "watercolor", kind: .watercolor, isDarkSurface: false)
+    )
+
+    static let dotted = PaperTheme(
+        id: "dotted",
+        name: "Точечная",
+        isPro: true,
+        base: PaperRGB(hex: 0xF4F1E7),
+        ink: PaperRGB(hex: 0x292722),
+        ink2: PaperRGB(hex: 0x625F54),
+        shadowRGB: PaperRGB(hex: 0x3B372B),
+        isDark: false,
+        texture: ProceduralPaperTexture(id: "dotted", kind: .dotted, isDarkSurface: false)
+    )
+
     static let graphite = PaperTheme(
         id: "graphite",
         name: "Графит",
@@ -377,17 +448,15 @@ struct PaperTheme: Identifiable, Equatable {
         ink2: PaperRGB(hex: 0xB3ADA0),
         shadowRGB: PaperRGB(hex: 0x000000),
         isDark: true,
-        texture: nil
+        texture: ProceduralPaperTexture(id: "graphite", kind: .graphite, isDarkSurface: true)
     )
 
-    static let phase1Themes: [PaperTheme] = [.cleanSheet, .cotton]
+    static let allThemes: [PaperTheme] = [
+        .cleanSheet, .cotton, .washi, .kraft, .parchment, .linen, .watercolor, .dotted, .graphite
+    ]
 
     static func theme(withID id: String) -> PaperTheme {
-        switch id {
-        case cotton.id: return .cotton
-        case graphite.id: return .graphite
-        default: return .cleanSheet
-        }
+        allThemes.first { $0.id == id } ?? .cleanSheet
     }
 
     static func resolved(

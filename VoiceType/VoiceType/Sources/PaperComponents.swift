@@ -143,10 +143,57 @@ extension View {
 
 struct PaperBackground: View {
     @Environment(\.paperTheme) private var theme
+    @Environment(\.paperGrainIntensity) private var grainIntensity
+
+    @State private var tileImage: NSImage?
+    @State private var loadedTextureID: String?
 
     var body: some View {
-        theme.baseColor
-            .ignoresSafeArea()
+        ZStack {
+            theme.baseColor
+
+            if let procedural = theme.texture as? ProceduralPaperTexture,
+               let tileImage,
+               loadedTextureID == procedural.id,
+               grainIntensity > 0.01 {
+                Image(nsImage: tileImage)
+                    .resizable(resizingMode: .tile)
+                    .opacity(procedural.baseOpacity * min(1, max(0, grainIntensity)))
+                    .blendMode(procedural.blendMode)
+                    .allowsHitTesting(false)
+            }
+
+            if theme.id == PaperTheme.parchment.id {
+                RadialGradient(
+                    colors: [
+                        Color.clear,
+                        theme.shadowRGB.color.opacity(0.10 * min(1, max(0, grainIntensity)))
+                    ],
+                    center: .center,
+                    startRadius: 120,
+                    endRadius: 640
+                )
+                .allowsHitTesting(false)
+            }
+        }
+        .ignoresSafeArea()
+        .task(id: theme.id) {
+            guard let procedural = theme.texture as? ProceduralPaperTexture else {
+                tileImage = nil
+                loadedTextureID = nil
+                return
+            }
+            if let sync = await PaperTextureCache.shared.cachedTileSync(for: procedural.id) {
+                tileImage = sync
+                loadedTextureID = procedural.id
+                return
+            }
+            let generated = await PaperTextureCache.shared.tile(for: procedural)
+            if !Task.isCancelled {
+                tileImage = generated
+                loadedTextureID = procedural.id
+            }
+        }
     }
 }
 

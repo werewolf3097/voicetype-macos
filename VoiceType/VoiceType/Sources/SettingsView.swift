@@ -585,15 +585,22 @@ final class DashboardWindowController {
     private var appState: AppState?
     private var settings: SettingsStore?
     private var history: HistoryStore?
+    private var entitlement: LocalProEntitlement?
 
-    func configure(appState: AppState, settings: SettingsStore, history: HistoryStore) {
+    func configure(
+        appState: AppState,
+        settings: SettingsStore,
+        history: HistoryStore,
+        entitlement: LocalProEntitlement
+    ) {
         self.appState = appState
         self.settings = settings
         self.history = history
+        self.entitlement = entitlement
     }
 
     func show(section: DashboardSection? = nil) {
-        guard let appState, let settings, let history else { return }
+        guard let appState, let settings, let history, let entitlement else { return }
 
         if let section {
             appState.selectedSection = section
@@ -609,6 +616,8 @@ final class DashboardWindowController {
                 .environmentObject(history)
                 .environmentObject(appState.dictionary)
                 .environmentObject(appState.meetings)
+                .environmentObject(entitlement)
+                .environment(\.proEntitlement, entitlement)
                 .applyPaperEnvironment(settings)
             let hostingController = NSHostingController(rootView: rootView)
             let newWindow = NSWindow(contentViewController: hostingController)

@@ -19,7 +19,8 @@ struct VoiceTypeApp: App {
         DashboardWindowController.shared.configure(
             appState: state,
             settings: settingsStore,
-            history: historyStore
+            history: historyStore,
+            entitlement: entitlement
         )
     }
 
@@ -30,6 +31,7 @@ struct VoiceTypeApp: App {
                 .environmentObject(settings)
                 .environmentObject(history)
                 .environmentObject(appState.meetings)
+                .environmentObject(entitlement)
                 .environment(\.proEntitlement, entitlement)
                 .applyPaperEnvironment(settings)
         } label: {
@@ -44,6 +46,7 @@ struct VoiceTypeApp: App {
                 .environmentObject(history)
                 .environmentObject(appState.dictionary)
                 .environmentObject(appState.meetings)
+                .environmentObject(entitlement)
                 .environment(\.proEntitlement, entitlement)
                 .applyPaperEnvironment(settings)
         }

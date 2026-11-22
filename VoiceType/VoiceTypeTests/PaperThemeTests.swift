@@ -2,11 +2,15 @@ import XCTest
 @testable import VoiceTypeTests
 
 final class PaperThemeTests: XCTestCase {
-    func testPhase1ThemesMeetMinimumWCAGContrast() {
-        let themes: [PaperTheme] = [.cleanSheet, .cotton, .graphite]
-        for theme in themes {
+    func testAllNineThemesMeetMinimumWCAGContrast() {
+        XCTAssertEqual(PaperTheme.allThemes.count, 9)
+
+        for theme in PaperTheme.allThemes {
             let inkContrast = theme.base.contrastRatio(with: theme.ink)
             let secondaryContrast = theme.base.contrastRatio(with: theme.ink2)
+
+            print(String(format: "[Contrast] %@ (%@): ink=%.2f:1, ink2=%.2f:1",
+                         theme.name, theme.id, inkContrast, secondaryContrast))
 
             XCTAssertGreaterThanOrEqual(
                 inkContrast,
@@ -18,6 +22,18 @@ final class PaperThemeTests: XCTestCase {
                 4.5,
                 "\(theme.name) secondary ink contrast \(secondaryContrast) must be >= 4.5:1"
             )
+        }
+    }
+
+    func testProceduralTileGenerationProduces512x512ForAllTexturedPapers() {
+        let textured = PaperTheme.allThemes.compactMap { $0.texture as? ProceduralPaperTexture }
+        XCTAssertEqual(textured.count, 8)
+
+        for tex in textured {
+            let image = PaperTextureCache.shared.generateTile(for: tex)
+            XCTAssertNotNil(image, "Tile must generate for \(tex.id)")
+            XCTAssertEqual(image?.size.width ?? 0, 512, accuracy: 0.1)
+            XCTAssertEqual(image?.size.height ?? 0, 512, accuracy: 0.1)
         }
     }
 
