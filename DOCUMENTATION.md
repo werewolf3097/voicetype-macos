@@ -1,381 +1,203 @@
 # VoiceType — проектная документация
 
-Голосовой ввод для macOS: зажал клавишу, сказал, отпустил — текст расшифрован и вставлен
-в активное поле. Работает поверх любого приложения через глобальный хоткей.
+Голосовой ввод и запись/транскрибация встреч для macOS (`com.farrukh.voicetype`): зажал клавишу, продиктовал, отпустил — текст расшифрован, очищен ИИ в выбранной тональности и вставлен в активное окно; во встречах — раздельная запись микрофона и системного звука, расшифровка, рекап и экспорт в Obsidian/Webhook.
 
-Статус: **рабочий MVP под macOS**. Windows — scaffolding в отдельном репозитории, реализация
-не начата. iOS и Android сознательно отложены до проверки продукта на desktop (см.
-«Дорожная карта»).
+Статус: **рабочее macOS-приложение (SwiftUI + AppKit, macOS 14.0+)**.
 
-## 0. Экосистема VoiceType
-
-Этот репозиторий — реализация под macOS. Сейчас в работе только desktop-платформы
-(macOS + Windows); мобильные отложены до проверки продукта. Общее (поток данных, контракты
-внешних API, сравнение платформенных ограничений) — в
-[voicetype-docs](https://github.com/werewolf3097/voicetype-docs).
-
-| Репозиторий | Платформа | Статус |
-|---|---|---|
-| VoiceType (этот репозиторий) | macOS | ✅ рабочий MVP |
-| [voicetype-windows](https://github.com/werewolf3097/voicetype-windows) | Windows | 🚧 scaffolding |
-| [voicetype-docs](https://github.com/werewolf3097/voicetype-docs) | — | общая документация |
-| iOS, Android | — | ⏸ отложено до проверки продукта на desktop |
+> Документация синхронизируется с разделом `VoiceType/` в личном хранилище заметок [pers_docs](https://github.com/werewolf3097/pers_docs).
 
 ---
 
-## 1. Как это работает (поток данных)
+## 0. Экосистема VoiceType
 
+| Репозиторий | Платформа | Статус |
+|---|---|---|
+| [voicetype-macos](https://github.com/werewolf3097/voicetype-macos) *(этот репозиторий)* | macOS | Активная разработка |
+| [voicetype-windows](https://github.com/werewolf3097/voicetype-windows) | Windows | Companion-репозиторий |
+| [voicetype-docs](https://github.com/werewolf3097/voicetype-docs) | — | Контракты и матрица платформ |
+| [pers_docs/VoiceType](https://github.com/werewolf3097/pers_docs) | Obsidian / Notes | Продуктовая документация и бэклог |
+| iOS, Android | Мобильные | Отложено |
+
+---
+
+## 1. Поток данных: Диктовка и Встречи
+
+### 1.1. Глобальная диктовка
 ```
-[зажата клавиша] ──▶ AudioRecorder начинает запись (WAV 16kHz mono)
-                                    │
-[клавиша отпущена] ──▶ запись останавливается, файл готов
-                                    │
-                  DictationTranscriptionCoordinator
-          ┌─────────────────────────┴──────────────────────────┐
-          │ (по умолчанию: выкл)                                │ (включён «Домашний сервер»)
-          ▼                                                     ▼
- GapiTranscriptionProvider                           AudioCompressor (Opus ~24 кбит/с CAF,
- POST console.gapi.uz/v1/transcribe                  резерв: AAC >= 48 кбит/с M4A)
- (исходный WAV multipart)                                       │
-          │                                                     ▼
-          │                                           HomeServerProvider
-          │                                           POST /v1/transcribe?engine=...&lang=...&fallback=...
-          │                                           (Tailscale, connect-таймаут 3 с)
-          │                                                     │
-          │                      (Tailscale выкл / 502 / таймаут) ──▶ автопереход на Gapi + уведомление
-          └─────────────────────────┬──────────────────────────┘
-                                    ▼
-                        HistoryStore (history.json: +engine, +latencyMs)
-                                    │
-                              TextInjector
-                     копия в буфер обмена всегда; если включена автовставка —
-               сначала проверяется, есть ли под курсором поле, куда можно вставить
-              (Accessibility API), и только тогда шлётся синтетический ⌘V
+[Хоткей: Удержание / Нажатие / Удержание или ×2] ──▶ HotkeyStateMachine + AudioRecorder (WAV 16 kHz mono)
+                                                     (+ опционально встроенный микрофон вместо Bluetooth и звуки)
+                                                               │
+[Отпускание / стоп] ──▶ запись готова (Esc отменяет запись)
+                                                               │
+                                         DictationTranscriptionCoordinator
+                       ┌───────────── последовательная очередь sttDictationRoute ──────────────┐
+                       ▼                    ▼                         ▼                          ▼
+                1. Домашний шлюз        2. gapi.uz             3. Google Gemini           4. OpenAI
+                (AudioCompressor        (WAV multipart)        (inline audio ->           (whisper-1 ->
+                 Opus 24 kbps CAF)                              generateContent)           /audio/transcriptions)
+                       │                    │                         │                          │
+                       └──── при сбое / таймауте ──▶ автопереход к следующему настроенному шагу ─┘
+                                                               │
+                                         DictionaryStore (локальные замены «слышится → пишется»)
+                                                               │
+                                         LLMPostProcessor (если CleanupStyle != .off и задан провайдер)
+                      ┌────────────────────────┴────────────────────────┐
+                      ▼                                                 ▼
+             Успех: очищенный текст +                          Ошибка: безопасный fallback к исходному
+             llmSummary («ИИ: Gemini · ... мс»)                тексту (диктовка не теряется) + запись причины
+                                                               │
+                                          TextInjector (буфер + ⌘V + опц. возврат буфера через ~400 мс)
+                                                               │
+                                          HistoryStore (history.json: text, style, engine, latencyMs, llmSummary)
 ```
 
-Всё происходит асинхронно на фоне; статус (запись / распознавание / обработка / ошибка)
-отражается сразу в двух местах, не дожидаясь открытия меню:
-- **иконка в строке меню** анимируется (`symbolEffect`) — «дышащий» waveform во время записи,
-  пульсирующий во время распознавания/обработки;
-- **плавающая капсула** вверху экрана (`RecordingIndicatorController`) — NSPanel поверх всех
-  окон и Spaces, в духе системной капсулы «Используется микрофон»: появляется на «Слушаю…» /
-  «Распознаю речь…» / «Обрабатываю текст…», при ошибке показывает текст ошибки и гаснет сама
-  через 3 секунды, в режиме idle скрыта.
+Статус отображается одновременно в:
+- **иконке строки меню** (`MenuBarIcon`: waveform-анимации, поповер `MenuBarView.swift`);
+- **плавающей капсуле** (`RecordingIndicatorController` + `RecordingIndicatorView.swift`: размещение у «чёлки», в строке меню или снизу экрана; живые столбики уровня звука, анимации ожидания/ошибки).
+
+### 1.2. Встречи (`MeetingsStore`, `MeetingAudioRecorder`)
+1. Запись микрофона (`mic.wav` — спикер «Вы») и системного звука (`sys.wav` — спикер «Собеседники» через CoreAudio Process Tap / ScreenCapture).
+2. После остановки запускается независимая от диктовки очередь **`sttMeetingRoute`**:
+   - **Локальный сервер Whisper (`WhisperWindowsClient`):** локальный VAD делит аудио на речевые срезы (до 75 с), раздельно распознаёт `mic` и `sys`, склеивает сегменты (`mergeAndCleanSegments`). Если сервер недоступен и включено *«Ждать локальный сервер в очереди»*, встреча ставится в `.queued` с кнопкой ручной отправки в следующий облачный сервис; если ожидание выключено — сразу переходит к `#2`.
+   - **`gapi.uz` (`GapiClient`):** при наличии `sys.wav` объединяет каналы в стерео-WAV, отправляет на `/v1/transcribe`, опционально запрашивает серверное резюме (`×1.3`) и прогоняет ташкентский/книжный диалект через `UzbekDialectConverter`.
+   - **`Google Gemini` (`GeminiAudioSTTProvider`):** так как Gemini API сводит стерео-аудио в моно на входе, нарезает `mic` и `sys` раздельно через VAD (до 180 с, сжатие в AAC/M4A при >12 МБ), запрашивает JSON-сегменты с относительными таймкодами и склеивает роли **«Вы»** и **«Собеседники»**.
+   - **`OpenAI` (`OpenAIAudioSTTProvider`):** соблюдает строгий лимит **25 МБ на запрос** — нарезает `mic` и `sys` через VAD (сжатие в AAC/M4A при >23 МБ) и отправляет раздельно на `/v1/audio/transcriptions` (`whisper-1`, `response_format=verbose_json`).
+3. Далее `MeetingRecapGenerator` строит структурированный рекап и задачи через активного LLM-провайдера (или локальный fallback `LocalRecapBuilder`), и при настроенном пути экспорта сохраняет `*_vt.md` (Obsidian) или отправляет JSON на Webhook.
+
+---
 
 ## 2. Структура репозитория
 
 ```
-VoiceType/                      ← эта папка, "рядом с проектом"
-├── DOCUMENTATION.md            ← вы здесь
-├── VoiceType.app               ← готовая сборка (создаётся build-app.sh)
-└── VoiceType/                  ← исходники и Xcode-проект
-    ├── project.yml             ← описание таргета для XcodeGen
-    ├── build-app.sh            ← собрать Release .app одной командой
-    ├── README.md                ← краткая инструкция запуска/настройки
-    ├── .gitignore
-    ├── VoiceType.xcodeproj/    ← генерируется из project.yml, в git не нужен
-    └── VoiceType/
-        ├── Resources/
-        │   └── Info.plist       ← сгенерирован XcodeGen (NSMicrophoneUsageDescription, LSUIElement: false)
-        └── Sources/
-            ├── VoiceTypeApp.swift     — точка входа, MenuBarExtra + Settings-сцена
-            ├── AppState.swift        — оркестрация: запись → провайдер диктовки / встречи → вставка
-            ├── AudioRecorder.swift   — запись в WAV через AVAudioRecorder
-            ├── AudioCompressor.swift — сжатие диктовки в Opus ~24 кбит/с (CAF) / AAC >= 48 кбит/с (M4A) для домашнего шлюза
-            ├── TranscriptionProvider.swift — протокол TranscriptionProvider, GapiTranscriptionProvider и координатор fallback
-            ├── HomeServerProvider.swift — клиент домашнего шлюза (Parakeet/Whisper/Gapi, connect-таймаут 3 с, /v1/health)
-            ├── HotkeyManager.swift   — глобальный push-to-talk хоткей (CGEventTap)
-            ├── GapiClient.swift      — клиент gapi (транскрибация речи + словарь проекта)
-            ├── ClaudeClient.swift    — клиент Anthropic Messages API (очистка текста и рекапы)
-            ├── TextInjector.swift    — буфер обмена + проверка поля под курсором + синтетический ⌘V
-            ├── SettingsStore.swift   — настройки (хоткей, стиль очистки, домашний сервер, автовставка, значок в Dock)
-            ├── HistoryStore.swift    — история расшифровок: чтение/запись history.json (включая engine и latencyMs)
-            ├── KeychainStore.swift   — хранение API-ключей и токена шлюза в Keychain
-            ├── PermissionsHelper.swift — запрос микрофона, точная проверка «Мониторинга ввода» (IOHIDCheckAccess), диплинки в System Settings
-            ├── NotificationHelper.swift — push-уведомления (UNUserNotificationCenter) о проблемах с хоткеем
-            ├── DockIconController.swift — показать/скрыть значок в Dock (NSApp.setActivationPolicy)
-            ├── AppDelegate.swift     — пункт «Настройки…» в контекстном меню значка в Dock
-            ├── RecordingIndicatorView.swift — вид плавающей капсулы-индикатора (запись/распознавание/…)
-            ├── RecordingIndicatorController.swift — NSPanel поверх всех окон и Spaces для этой капсулы
-            ├── MenuBarView.swift     — UI выпадающего меню в строке статуса
-            ├── SettingsView.swift    — окно приложения: боковая панель + переключение секций
-            ├── DashboardHomeView.swift — «Главная»: статус, реальная статистика, последняя расшифровка
-            ├── DashboardHistoryView.swift — «История»: список сохранённых расшифровок
-            ├── DashboardDictionaryView.swift — «Словарь»: словарь проекта gapi (добавить/удалить термин)
-            └── DashboardSettingsView.swift — «Настройки»: ключи, хоткей, стиль очистки, разрешения
+voicetype-macos/
+├── AGENTS.md                         ← правила сборки, дизайна, STT/LLM-архитектуры и памяти
+├── DOCUMENTATION.md                    ← этот файл
+├── VoiceType.app                     ← собранный и подписанный Release-бандл
+└── VoiceType/
+    ├── project.yml                   ← описание таргетов VoiceType и VoiceTypeTests для XcodeGen
+    ├── build-app.sh                  ← Release-сборка, копирование в VoiceType.app, подпись и проверка
+    ├── scripts/benchmark-gateway.sh  ← бенчмарк домашнего шлюза
+    ├── VoiceTypeTests/               ← 49 юнит-тестов (PaperTheme, HotkeyStateMachine, Phase2/3/6, HomeServer, LLM/STT)
+    └── VoiceType/Sources/
+        ├── AppDelegate.swift, VoiceTypeApp.swift
+        ├── AppState.swift                       ← оркестрация диктовки и встреч, статус, fallback
+        ├── SettingsStore.swift                  ← настройки, миграции, CleanupStyle, CleanupModifiers, очереди STT
+        ├── KeychainStore.swift                  ← безопасное хранение всех токенов и API-ключей
+        ├── PaperTheme.swift, PaperComponents.swift, PaperTextureGenerator.swift ← дизайн-система Paper UI
+        ├── DashboardHomeView.swift              ← «Диктовка»: 4 капсулы стилей, 4 чипа надстроек, ?-памятка, статус ИИ
+        ├── DashboardMeetingsView.swift          ← «Встречи»: рекордер, список, транскрипт, рекап, заметки, экспорт
+        ├── DashboardHistoryView.swift           ← «История»: поиск, фильтры, переобработка стилем, llmSummary
+        ├── DashboardDictionaryView.swift        ← «Словарь»: локальные замены + синхронизация словаря gapi.uz
+        ├── DashboardSettingsView.swift          ← «Настройки»: тема/шрифт, очереди STT, LLM-провайдеры, ключи, разрешения
+        ├── MenuBarView.swift, SettingsView.swift, PermissionsChecklistView.swift
+        ├── AudioRecorder.swift, AudioCompressor.swift, AudioInputDeviceManager.swift, SoundCuePlayer.swift
+        ├── HotkeyManager.swift, HotkeyStateMachine.swift, TextInjector.swift
+        ├── TranscriptionProvider.swift, HomeServerProvider.swift, GapiClient.swift
+        ├── WhisperWindowsClient.swift, CloudAudioSTTProviders.swift, TranscriptionProgress.swift
+        ├── LLMPostProcessor.swift, ClaudeClient.swift, UzbekDialectConverter.swift
+        ├── MeetingsStore.swift, MeetingAudioRecorder.swift, MeetingRecapGenerator.swift
+        └── HistoryStore.swift, DictionaryStore.swift, DockIconController.swift, NotificationHelper.swift, PermissionsHelper.swift
 ```
 
-## 3. Внешние сервисы
+---
 
-### Домашний сервер (шлюз транскрибации в Tailscale)
+## 3. Распознавание речи (STT) и раздельные очереди
 
-Опциональный провайдер диктовки (`HomeServerProvider.swift`), скрытый за переключателем
-**«Использовать домашний сервер»** в Настройках (по умолчанию **выключен** — старый флоу через
-`gapi.uz` остаётся без изменений).
+В **Настройках** управляются две независимые очереди с изменением порядка (`↑` / `↓`), тумблерами вкл/выкл, индикатором готовности (`Готов` / кнопка быстрой настройки ключа или URL):
 
-- **Эндпоинты:**
-  - `POST <baseURL>/v1/transcribe?engine=auto|parakeet|whisper|gapi&lang=auto|ru|uz|en&fallback=0|1` —
-    заголовок `Authorization: Bearer <токен>`, в теле сырое сжатое аудио.
-    Ответ `200`: `{"text","engine","language","seconds","audio_seconds","fallback_from"}` (и `note` для gapi вне `uz`).
-    Ошибки `{"error"}`: `400` (параметры/пустое тело), `401` (токен), `413` (>50 МБ),
-    `415` (не аудио), `422` (короче 0,2 с), `429` (>4 одновременно), `502` (все движки недоступны).
-  - `GET <baseURL>/v1/health` (с Bearer-токеном) → `{"ok", "engines": {"parakeet", "whisper", "gapi"}}` —
-    используется кнопкой **«Проверить соединение»** в Настройках.
-- **Выбор движка:**
-  - **Авто (рекомендуется)** (`engine=auto`, `fallback=1`): при `lang=uz` идёт в Gapi; иначе каскад `Parakeet → Whisper → Gapi`.
-  - **Быстро — Parakeet** (`engine=parakeet`, `fallback=0`): ~1 с на круг (русский и английский со знаками препинания).
-  - **Точно — Whisper** (`engine=whisper`, `fallback=0`): Whisper large-v3-turbo (~5–6 с, выше точность чисел/терминов).
-  - **Узбекский — Gapi** (`engine=gapi`, `fallback=0`).
-- **Сжатие аудио (`AudioCompressor.swift`):** для экономии домашнего исходящего канала (~1 Мбит/с)
-  WAV 16 kHz mono перед отправкой на шлюз сжимается через `AVAudioConverter` в **Opus ~24 кбит/с**
-  в компактный CAF (без page-align padding, ~14 КБ на 5 с речи; время кодирования ~25 мс).
-  При ошибке Opus-кодера включается резервное кодирование в **AAC/M4A 64 кбит/с** (не ниже 48 кбит/с).
-  В системные логи (`os.Logger`) пишутся только кодек, размеры и время кодирования — без аудио и текста.
-  Для прямого `GapiClient` формат отправки не меняется (WAV).
-- **Отказоустойчивость (fallback):** для подключения к шлюзу выставлен connect-таймаут **3 с**
-  (при этом длинный ответ Whisper после установки соединения не обрывается). Если шлюз недоступен
-  (Tailscale выключен, сетевая ошибка, таймаут или HTTP `502`) и в настройках задан токен gapi,
-  `DictationTranscriptionCoordinator` автоматически отправляет исходный WAV в `gapi.uz` и показывает
-  короткое уведомление через `NotificationHelper`. Клиентские ошибки (`401`, `422`, `429`) не
-  маскируются fallback'ом и показываются напрямую.
+1. **Для диктовки (`sttDictationRoute` / `STTDictationSource`):**
+   - `localGateway` — Домашний шлюз (`HomeServerProvider`, Tailscale, Opus 24 кбит/с CAF, connect-таймаут 3 с; синхронизирован с `useHomeServer`).
+   - `gapi` — облачный STT `gapi.uz` (особенно хорош для узбекской и смешанной рус/узб речи).
+   - `gemini` — `GeminiAudioSTTProvider`.
+   - `openai` — `OpenAIAudioSTTProvider`.
+2. **Для встреч (`sttMeetingRoute` / `STTMeetingSource`):**
+   - `localWhisper` — Локальный сервер Whisper (`whisperServerURL`, вынесен в основной блок STT).
+   - `gapi` — облачный STT `gapi.uz` (стерео-дорожки + опциональное резюме `×1.3`).
+   - `gemini` — `GeminiAudioSTTProvider` (раздельная обработка `mic` и `sys`).
+   - `openai` — `OpenAIAudioSTTProvider` (раздельная обработка `mic` и `sys` чанками <23 МБ).
+   - Флаг `waitForLocalMeetingServerInQueue`: определяет, ждать ли локальный сервер в очереди при недоступности (с кнопкой ручной отправки в следующий облачный сервис) или сразу переходить к `#2` и далее.
 
-### gapi (console.gapi.uz) — распознавание речи
+### Почему Anthropic Claude не включён в STT
+По официальной документации Anthropic Messages API (`docs.anthropic.com`), API принимает только текст и изображения — аудиовход не поддерживается. Anthropic используется исключительно в блоке **обработки текста и рекапов (LLM)**.
 
-- Эндпоинт: `POST https://console.gapi.uz/v1/transcribe` (синхронный, записи до 5 минут —
-  ровно наш случай для push-to-talk). Если обработка не укладывается в 3 минуты, приходит
-  `202` с `job_id`, дальше опрос `GET /v1/jobs/{id}` → `GET /v1/jobs/{id}/result`
-  (это уже реализовано в `GapiClient` на случай длинных записей).
-- Авторизация: заголовок `Authorization: Bearer <токен>`. Токен создаётся в кабинете на
-  вкладке «API-токены», хранится в Keychain, никогда не пишется в код/настройки открытым текстом.
-- **Важное ограничение: gapi распознаёт только узбекскую речь**, результат отдаётся латиницей.
-  Для русского/английского ввода понадобится другой STT-движок (например, встроенное
-  распознавание речи Apple или Whisper) — в текущей версии это не реализовано.
-- Тариф: 1 g = 1 минута аудио. Бета-период — 240 g в сутки бесплатно.
+---
 
-### Anthropic Claude API — постобработка текста
+## 4. Постобработка текста ИИ (LLM), модели и стили
 
-- Эндпоинт: `POST https://api.anthropic.com/v1/messages`, модель `claude-sonnet-5`.
-- Используется **только если** задан ключ и выбран стиль обработки, отличный от
-  «Без обработки» (`CleanupStyle` в `SettingsStore.swift`): грамматика / заметка / сообщение.
-  Каждый стиль — отдельный system-prompt, отправляется сырой текст от gapi, ответ подменяет
-  исходный текст перед вставкой.
-- Ключ — с console.anthropic.com, платится по использованию (**не входит в Claude Pro/Max
-  подписку** — это отдельный API-биллинг).
+### 4.1. Провайдеры LLM (`LLMPostProcessor.swift`)
+Поддерживается 4 варианта для очистки диктовки и генерации рекапов встреч:
+- **Anthropic Claude** (`/v1/messages`, по умолчанию `claude-haiku-5-5`);
+- **OpenAI** (`/v1/chat/completions`, по умолчанию `gpt-5-mini`);
+- **Google Gemini** (`generateContent`, по умолчанию `gemini-3.8-flash`; устаревшая `gemini-2.5-flash` автоматически мигрирует);
+- **Другой (OpenAI-совм.)** (пресеты OpenRouter, Groq, DeepSeek, Ollama, LM Studio + произвольный Base URL).
 
-## 4. Хранение секретов
+Особенности реализации:
+- Поле модели по умолчанию хранит `""`, отображая серый драфт (`defaultModel`); при вводе своей модели появляется кнопка сброса `×`. В выпадающем меню `▾` можно выбрать популярную модель или подтянуть актуальный список через `/models` по вашему ключу.
+- Для thinking-моделей Gemini (`gemini-4-hydrogen`, `gemini-3.8-flash` и др.) в `testConnection()` используется `maxTokens = 1024`, в `cleanup`/`recap` — `8192`, а части с `thought == true` отфильтровываются.
+- Для reasoning-моделей OpenAI (`gpt-5*`, `o1*`, `o3*`, `o4*`, `codex*`) передаётся `max_completion_tokens` без параметра `temperature`.
 
-Все секреты (`gapiToken`, `anthropicApiKey`, `homeServerToken`) хранятся исключительно через
-`KeychainStore.swift` — обёртку над `Security` framework (generic password items), никогда не
-пишутся в `UserDefaults`, логи или исходники. Несекретные настройки (хоткей, стиль очистки,
-автовставка, адрес/режим/язык домашнего сервера, значок в Dock) хранятся в `UserDefaults`.
-В текстах ошибок и системных логах никогда не выводятся Bearer-токен и расшифрованный текст диктовки.
+### 4.2. 4 категории стилей и 5 надстроек
+**База во всех 3 ИИ-категориях:** расстановка пунктуации, исправление орфографии/падежей/сбоев распознавания, удаление слов-паразитов (*«э-э», «ну», «как бы»*) и устных самоисправлений.
 
-## 5. Значок в Dock
-
-По умолчанию у приложения есть и иконка в Dock, и значок в строке меню одновременно
-(`LSUIElement: false` в `Info.plist` — обычное приложение, не «только меню-бар»).
-Показ значка в Dock управляется вживую, без перезапуска: тумблер «Показывать значок в Dock»
-в Настройках → секция «Приложение» вызывает `DockIconController.apply(visible:)`, который
-переключает `NSApplication.shared.setActivationPolicy` между `.regular` (иконка есть) и
-`.accessory` (иконки нет, работает только через строку меню). Меню в строке статуса доступно
-в любом случае — тумблер влияет только на Dock.
-
-Правый клик (или клик и удержание) на значке в Dock открывает системное меню — в него
-добавлен пункт «Настройки…» через `AppDelegate.applicationDockMenu(_:)`. Так как это
-AppKit-меню вне SwiftUI-иерархии, `\.openSettings` там недоступен: используется
-`NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)` — приватный, но
-широко используемый способ открыть Settings-сцену SwiftUI из произвольного места.
-
-## 6. Окно приложения (дашборд)
-
-По кнопке «Настройки…» (в меню строки статуса или в контекстном меню значка Dock)
-открывается не одна форма, а окно с боковой панелью из четырёх разделов
-(`SettingsView.swift` + `Dashboard*View.swift`). Все данные в нём настоящие — ничего
-не пришито статикой:
-
-| Раздел | Что показывает | Источник данных |
+| Категория (`CleanupStyle`) | Нагрузка | Назначение |
 |---|---|---|
-| **Главная** | Текущий статус (готов/запись/распознавание/ошибка), карточка последней расшифровки, кнопка «Скопировать снова», подсказка по хоткею и активному стилю очистки | `AppState.status`, `HistoryStore.records.first`, `SettingsStore` |
-| **Главная → плитки статистики** | «Расшифровок» (count), «Слов надиктовано» (сумма слов по истории), «Средняя скорость» (слов/мин — только если есть записи с известной длительностью), «Активных дней» (число уникальных дат в истории) | Считается на лету из `HistoryStore.records`, ничего не хранится отдельно |
-| **История** | Список всех расшифровок с датой, числом слов, длительностью, движком (`engine`) и задержкой (`latencyMs`); удаление всей истории | `HistoryStore` → `~/Library/Application Support/VoiceType/history.json` (обратно совместимая миграция старых записей), до 200 записей, только на этом Mac |
-| **Словарь** | Термины словаря проекта gapi (компании, продукты, имена) — добавление и удаление с сохранением на сервер | `GET`/`PUT https://console.gapi.uz/v1/vocabulary` через `GapiClient`, требует токен gapi |
-| **Настройки** | Ключи API, домашний сервер (тумблер, URL, токен в Keychain, режим, подсказка языка, кнопка «Проверить соединение»), хоткей, стиль очистки, автовставка, значок в Dock, статус разрешений | `SettingsStore`, `HomeServerProvider`, `PermissionsHelper` |
+| **Без обработки** | `0% правок` | Сырой текст от STT без задержки и правок |
+| **Дружественный** | `Лёгкая правка` | Живой тон для Telegram, Slack и чатов с сохранением «ты/вы» |
+| **Деловой** | `Средняя правка` | Собранный рабочий тон для коллег, писем, задач и заметок |
+| **Формальный** | `Полная редактура` | Строгий официально-вежливый регистр на «Вы» для документов |
 
-Сознательно не скопированы декоративные/неприменимые к этому проекту элементы из
-референса (Typeless): «Сэкономленное время», серии/heatmap активности, квота слов
-и апгрейд тарифа, реферальная и партнёрская программы, «Персонализация», перевод и
-«Спросите что угодно» — у VoiceType нет облачного бэкенда, платных тарифов и других
-голосовых команд, кроме диктовки, так что показывать эти блоки значило бы врать
-цифрами.
+**5 надстроек (`CleanupModifiers`):**
+1. **Без воды (`compactMode`)** — сжимает длинную речь до сути.
+2. **Списки и абзацы (`structuredLists`)** — оформляет перечисления буллитами и абзацами.
+3. **Код и термины (`preserveTechnicalTerms`, вкл. по умолчанию)** — защищает URL, пути, команды и `camelCase`/`snake_case`.
+4. **Автотон по приложению (`autoToneByApp`)** — для `Telegram`/`Slack`/`WhatsApp`/`Discord` временно выбирает *Дружественный*, для `Mail`/`Notes`/`Notion`/`Obsidian`/`Cursor`/`VS Code`/`Xcode`/`Terminal` — *Деловой* (при активном *Без обработки* не вмешивается).
+5. **Свой акцент (`customInstruction`)** — дополнительная пользовательская инструкция (например, перевод или запрет эмодзи).
 
-## 7. Разрешения macOS и зачем они
+На экране **Диктовка** доступна кнопка памятки `?` (`CleanupStyleGuideButton`) с примерами, а под **Последней диктовкой** и в **Истории** выводится строка `llmSummary` (`ИИ: Gemini · gemini-3.8-flash · Дружественный (540 мс)` или причина пропуска/ошибки с сохранением исходного текста).
 
-| Разрешение | Где | Зачем |
-|---|---|---|
-| Мониторинг ввода (Input Monitoring) | Системные настройки → Конфиденциальность и безопасность | Без него `CGEventTap` не увидит нажатие хоткея, пока приложение не активно — то есть нигде, кроме себя самого |
-| Микрофон | Системные настройки → Конфиденциальность и безопасность | Запись голоса через `AVAudioRecorder` |
-| Универсальный доступ (Accessibility) | Системные настройки → Конфиденциальность и безопасность | Нужен только если включена автовставка — и для проверки, есть ли под курсором поле ввода (`TextInjector.canPasteIntoFocusedField()`), и для самого синтетического ⌘V. Без этого разрешения проверка пропускается, и приложение просто пробует вставить как раньше |
+---
 
-Приложение не в App Sandbox (это осознанный выбор — иначе `CGEventTap` и синтетические
-события работают ненадёжно). Из кнопок в настройках приложения можно сразу открыть нужную
-панель системных настроек.
+## 5. UI и темы оформления (`PaperTheme.swift`)
+- **Темы:** чистая светлая (**«Чистый лист»**) и тёмная (**«Графит»**) + **Системная** (`PaperSegmentedControl`), с живым отслеживанием `NSApp.effectiveAppearance` через `SystemAppearanceObserver` и единым `.preferredColorScheme` в `PaperEnvironmentModifier`.
+- **Типографика (`FontPreset`):** 5 пресетов (`Бумага (New York + SF)`, `Книжный (Charter + SF)`, `Системный (SF)`, `Мягкий (SF Rounded)`, `Редакционный (Cormorant + Inter)`), применяемых единообразно во всех разделах включая «Встречи».
+- **Разделы сайдбара:** `Диктовка`, `Встречи`, `История`, `Словарь`, `Настройки` (+ список недавних встреч и статусная плашка готовности).
 
-### Если хоткей вдруг перестал реагировать
+---
 
-Несколько известных причин, большинство — не баг конкретно в нашем коде, а особенности macOS:
+## 6. Хранение секретов, подпись и разрешения macOS
+- **Keychain (`KeychainStore.swift`):** все ключи и токены (`gapiToken`, `anthropicApiKey`, `openaiApiKey`, `geminiApiKey`, `customLLMApiKey`, `homeServerToken`).
+- **Разрешения:** Микрофон, Мониторинг ввода (`CGEventTap` на `.cghidEventTap` + `IOHIDCheckAccess`), Универсальный доступ (автовставка `⌘V`), Запись системного звука (встречи).
+- **Стабильная подпись (`VoiceType/build-app.sh`):** подписывает бандл сертификатом `Apple Development` (или `Developer ID`) при наличии промежуточного `AppleWWDRCAG3.cer` в Keychain, сохраняя стабильный `Designated Requirement` (`identifier "com.farrukh.voicetype"`), чтобы разрешения macOS не сбрасывались при пересборках. `ENABLE_HARDENED_RUNTIME: false`.
 
-1. **Пересборка меняет подпись.** Сборка подписана ad-hoc («Sign to Run Locally»), без
-   стабильного Team ID. После каждой пересборки бинарник — по сути новое приложение с точки
-   зрения TCC (базы разрешений macOS), и разрешение «Мониторинг ввода», выданное старой
-   сборке, может не перенестись на новую. Если хоткей не реагирует после `build-app.sh` —
-   первым делом открыть Настройки → «Мониторинг ввода» и проверить/переключить тумблер
-   VoiceType (иногда помогает снять и заново поставить галочку).
-2. **Secure Keyboard Entry.** Если у Terminal (меню Terminal → Secure Keyboard Entry) или
-   другого приложения включён безопасный ввод с клавиатуры, **все** глобальные `CGEventTap`
-   в системе перестают получать события клавиатуры, пока это не выключат — это ограничение
-   уровня macOS, обойти его нельзя.
-3. **Таймаут отключения tap.** macOS может сама отключить `CGEventTap`, если сочтёт его
-   медленным (`kCGEventTapDisabledByTimeout`) — после этого события переставали приходить
-   насовсем, пока приложение не перезапустят. `HotkeyManager` теперь ловит это событие и сразу
-   включает tap обратно (`CGEvent.tapEnable`), плюс раз в 5 секунд отдельно проверяет
-   `CGEvent.tapIsEnabled` и чинит его, даже если конкретно это событие OS не прислала.
-4. **Уровень перехвата.** Раньше tap стоял на `.cgSessionEventTap` — событие мог «увести»
-   у сессии сам фронтовый процесс до того, как оно дойдёт до нас, поэтому хоткей переставал
-   срабатывать именно при переключении на некоторые приложения. Сейчас tap стоит на
-   `.cghidEventTap` — это уровень аппаратной клавиатуры, до того как windows server вообще
-   решает, какому приложению отдать событие, так что то, какое приложение сейчас активно,
-   больше не должно влиять. Право доступа то же самое («Мониторинг ввода»), но после
-   обновления стоит один раз проверить его в Настройках — как в пункте 1.
-5. **App Nap.** Настоящая причина, которую поймали диагностикой: хоткей срабатывал только
-   пока у VoiceType был фокус (открыто меню), и переставал сразу, как фокус уходил в другое
-   приложение — это учебниковый симптом App Nap: macOS снижает приоритет планировщика для
-   фоновых процессов без видимого окна/звука, и колбэк `CGEventTap`, даже созданный успешно,
-   обслуживается с большой задержкой или не обслуживается вовсе. Фикс — `AppDelegate`
-   держит живым `ProcessInfo.processInfo.beginActivity(options: [.userInitiated,
-   .latencyCritical], …)` всё время работы приложения, что выводит процесс из-под App Nap.
-6. **Хоткей не активировался, если не открывать меню.** `restartHotkeyListener()` раньше
-   вызывался только реактивно — из `onAppear` выпадающего меню в статус-баре и окна
-   настроек. Если пользователь запускал приложение и ни то, ни другое не открывал, tap
-   не создавался вообще ни разу за сессию. Теперь `AppState.init()` вызывает его сам
-   (через `DispatchQueue.main.async`, чтобы не трогать AppKit до того, как SwiftUI
-   закончит поднимать `NSApplication` — та же причина, что и в `DockIconController`).
-7. **`CGEvent.tapCreate` не значит «разрешение есть».** Tap может создаться успешно и
-   вернуть рабочий объект, даже если «Мониторинг ввода» реально не выдано — такой tap
-   просто никогда не получит ни одного настоящего нажатия клавиши. Раньше `hotkeyActive`
-   верил только факту создания tap, поэтому в этой ситуации приложение считало хоткей
-   рабочим и ничего не показывало. Теперь `restartHotkeyListener()` дополнительно
-   сверяется с `PermissionsHelper.inputMonitoringAuthorized()` (`IOHIDCheckAccess` —
-   API, специально предназначенный для этой проверки), и `hotkeyActive` становится
-   `true` только когда оба условия выполнены.
-   При сбое сразу приходит системное push-уведомление (`NotificationHelper.swift`,
-   `UNUserNotificationCenter`) с одним из двух текстов — «разрешение не выдано» или
-   «разрешение есть, но нужен перезапуск» (эти два случая неразличимы на уровне
-   `CGEvent.tapCreate`, различаются только через `IOHIDCheckAccess`, см. пункт 1 выше
-   про ad-hoc подпись). Уведомление шлётся один раз на смену состояния, а не при
-   каждом открытии меню — иначе спамило бы на каждый клик по значку в строке меню.
+---
 
-Плавающая капсула (см. раздел 1) отдельно помогает отличить эти случаи: если при зажатии
-хоткея капсула вообще не появляется — событие не дошло до приложения (проверять пункты выше);
-если капсула появилась и висит на «Слушаю…» бесконечно — проблема уже не в хоткее,
-а в запросе к gapi/Claude.
-
-## 8. Сборка и запуск
-
-Подробности — в [VoiceType/README.md](VoiceType/README.md). Коротко:
-
-- Разработка: `xcodegen generate && open VoiceType.xcodeproj`, запуск через Xcode (⌘R).
-- Готовый `.app`: `./VoiceType/build-app.sh` — собирает Release, кладёт `VoiceType.app`
-  рядом с папкой проекта.
-- Юнит-тесты (выбор движка, разбор ответов/ошибок, сжатие аудио, fallback, миграция `history.json`, локальный мок шлюза):
+## 7. Сборка и тестирование
+- **Юнит-тесты:**
   ```bash
   cd VoiceType && xcodegen generate && xcodebuild -project VoiceType.xcodeproj -scheme VoiceType test CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO
   ```
-- Бенчмарк 20 запросов к живому домашнему шлюзу (русская фраза ~5 с, режим «Авто», p50/p95; токен берётся только из `VOICE_GATEWAY_TOKEN`):
+- **Сборка и подпись Release-бандла:**
   ```bash
-  VOICE_GATEWAY_TOKEN="..." bash VoiceType/scripts/benchmark-gateway.sh
+  bash VoiceType/build-app.sh
+  ```
+- **Перезапуск:**
+  ```bash
+  pkill -x VoiceType || true; sleep 0.5; open "/Users/farrukh/orca/voicetype-macos/VoiceType.app"
   ```
 
-**Особенность этой машины:** рабочий стол синхронизируется через iCloud («Рабочий стол и
-Документы»), а iCloud на лету навешивает на файлы служебные расширенные атрибуты, которые
-ломают `codesign` прямо во время сборки («resource fork... not allowed»). Поэтому
-`build-app.sh` собирает в обычный `~/Library/Developer/Xcode/DerivedData` (не синхронизируется
-с iCloud) и уже готовый подписанный `.app` копирует сюда. Копирование после подписи безопасно:
-подпись считается по содержимому бандла, а не по метаданным Finder/iCloud.
+---
 
-Подпись — ad-hoc («Sign to Run Locally»), этого достаточно для запуска на этом Маке. Для
-раздачи другим людям нужны Apple Developer ID и нотаризация — иначе Gatekeeper заблокирует
-запуск на чужих машинах.
+## 8. Changelog
 
-## 9. Известные ограничения MVP
-
-- gapi понимает только узбекскую речь.
-- Хоткей — фиксированный список пресетов (правый Option/Command/Control/Shift), без
-  произвольной комбинации клавиш и без захвата обычных (не модификаторных) клавиш.
-- Нет кнопки «проверить соединение» для ключей в настройках — ошибка видна только по факту
-  неудачной расшифровки.
-- Нет автообновления приложения — новую сборку нужно собирать и подменять руками.
-- Не нотаризовано — раздать эту сборку кому-то ещё «в клик» нельзя.
-
-## 10. Дорожная карта
-
-Актуальный статус по всем платформам и планы — в
-[voicetype-docs/ROADMAP.md](https://github.com/werewolf3097/voicetype-docs/blob/main/ROADMAP.md).
-Коротко:
-
-- **macOS** (этот репозиторий): настраиваемый захват произвольной клавиши/комбинации,
-  кнопка проверки ключей, звук/анимация при начале и конце записи, поиск по истории,
-  Developer ID + нотаризация.
-- **Windows** ([voicetype-windows](https://github.com/werewolf3097/voicetype-windows)):
-  WinUI 3, глобальный хоткей через low-level keyboard hook, вставка через `SendInput`,
-  ключи — в Windows Credential Locker. Scaffolding уже создан.
-
-**iOS и Android отложены.** Решение — сфокусироваться на desktop (macOS + Windows) на
-старте, вернуться к мобильным платформам только если продукт покажет себя хорошо. Прежние
-репозитории со scaffolding удалены; архитектурные решения (Custom Keyboard Extension +
-App Group на iOS, Accessibility Service + собственный IME на Android) сохранены в
-[voicetype-docs/PLATFORM_MATRIX.md](https://github.com/werewolf3097/voicetype-docs/blob/main/PLATFORM_MATRIX.md)
-как справочный материал на будущее.
-
-Windows — по объёму сравним с текущим macOS MVP; реализация стартует отдельной сессией в
-своём репозитории.
-
-## 11. Changelog
-
-Коротко и по фактам — что изменилось и почему. Новые записи — сверху.
+### 2026-11-22
+- **Раздельные STT-очереди для диктовки и встреч (`sttDictationRoute`, `sttMeetingRoute`):** добавлены `GeminiAudioSTTProvider` (раздельная обработка `mic`/`sys` через VAD, т.к. Gemini сводит стерео в моно) и `OpenAIAudioSTTProvider` (`whisper-1`, `verbose_json`, нарезка чанками <23 МБ под лимит 25 МБ). Anthropic намеренно исключён из STT-списков.
+- **4 категории стилей и 5 надстроек LLM:** `Без обработки`, `Дружественный`, `Деловой`, `Формальный` с общей базой пунктуации/орфографии, чипами надстроек (`Без воды`, `Списки`, `Код и термины`, `Авто по приложению`), полем `Свой акцент`, памяткой `?` и телеметрией `llmSummary` с безопасным fallback к сырому тексту.
+- **Мультипровайдерный LLM (`LLMPostProcessor.swift`):** Claude, OpenAI, Gemini, OpenAI-совместимые сервисы; драфтовое поле модели + живая загрузка `/models`; исправлены thinking-ответы Gemini (`maxTokens = 1024`, фильтр `thought == true`) и OpenAI reasoning (`max_completion_tokens`, без `temperature`); добавлены `?`-подсказки со ссылками на документацию и кабинеты ключей.
+- **Paper UI (Фазы 1–6):** светлая («Чистый лист») и тёмная («Графит») темы, `SystemAppearanceObserver`, единый `.preferredColorScheme`, `PaperTokens.hairline = 1.0`, 5 пресетов шрифтов во всех разделах включая «Встречи», звуковые cues, выбор микрофона и приоритет встроенного микрофона над Bluetooth, 3-режимная машина состояний хоткея и обновлённый плавающий индикатор.
+- **Тесты (`VoiceTypeTests`):** расширены до 49 юнит-тестов (PaperTheme, HotkeyStateMachine, Phase2/3/6, HomeServer, LLM/STT парсинг и маршрутизация).
 
 ### 2026-11-20
-
-- **Подключён провайдер «Домашний сервер» (`HomeServerProvider`)** через минимальную абстракцию
-  `TranscriptionProvider` + `DictationTranscriptionCoordinator` без изменения поведения `gapi.uz`.
-  Фича вынесена за переключатель в Настройках и по умолчанию выключена.
-- **Сжатие аудио для шлюза (`AudioCompressor`):** запись WAV 16 kHz mono кодируется через
-  `AVAudioConverter` в Opus ~24 кбит/с (компактный CAF) с резервным AAC/M4A 64 кбит/с; в логи
-  пишутся только размер и время кодирования, без содержимого.
-- **Настройки домашнего сервера:** адрес, токен исключительно в Keychain (`homeServerToken`),
-  режим («Авто (рекомендуется)» / «Быстро — Parakeet» / «Точно — Whisper» / «Узбекский — Gapi»),
-  подсказка языка и кнопка «Проверить соединение» (`GET /v1/health`).
-- **Автоматический fallback на Gapi:** connect-таймаут 3 с (без обрыва долгих ответов Whisper),
-  при недоступности шлюза (Tailscale выкл, 502 или таймаут) автоматическая отправка исходного WAV
-  в `gapi.uz` с коротким уведомлением.
-- **История (`history.json`):** добавлены опциональные поля `engine` и `latencyMs` с обратно
-  совместимой миграцией без потери записей; отображаются в списке истории и карточке последней диктовки.
-- **Юнит-тесты и бенчмарк:** добавлен таргет `VoiceTypeTests` с локальным HTTP-моком шлюза
-  (`MockGatewayServer`) и скрипт `VoiceType/scripts/benchmark-gateway.sh`.
+- Подключён домашний шлюз (`HomeServerProvider`) с Opus/CAF сжатием и fallback на `gapi.uz`, добавлены `AudioCompressor`, `HistoryStore` (`engine`, `latencyMs`) и `VoiceTypeTests`.
 
 ### 2026-09-23
-
-- **Хоткей теперь запускается сразу при старте приложения**, а не только при открытии
-  меню в строке статуса или окна настроек. Раньше при обычном запуске (без единого клика
-  по значку) хоткей ни разу не активировался за сессию — см. раздел 7, пункт 6.
-- **Точная проверка разрешения «Мониторинг ввода».** `hotkeyActive` раньше верил только
-  успешному созданию `CGEventTap`, а он может быть «успешным» и без реального разрешения.
-  Теперь сверяется с `IOHIDCheckAccess` через `PermissionsHelper.inputMonitoringAuthorized()`
-  — см. раздел 7, пункт 7.
-- **Push-уведомления о проблемах с хоткеем** — новый `NotificationHelper.swift`
-  (`UNUserNotificationCenter`). При сбое присылает одно из двух уведомлений: разрешение
-  не выдано, или выдано, но нужен перезапуск приложения. Не спамит — уведомляет только
-  при смене состояния.
-- **Настройки визуально переработаны в минималистичном духе** (референс — CleanShot X):
-  `DashboardSettingsView` переведён с `Form(.formStyle(.grouped))` (боксы, тени, вложенные
-  секции) на плоскую раскладку — колонка лейблов, выровненных вправо, тонкие `Divider()`
-  между группами. Содержимое и число групп не менялись, только визуальный стиль.
+- Запуск хоткея при старте, точная проверка `IOHIDCheckAccess`, push-уведомления и переработка настроек.
